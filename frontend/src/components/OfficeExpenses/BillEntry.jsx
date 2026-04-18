@@ -79,7 +79,7 @@ export default function BillEntry() {
       itemName: it.itemName,
       amount: it.plannedAmount,
       gstType: 'CGST+SGST',
-      gstPercent: 18,
+      gstPercent: 0,
       cgstAmt: 0,
       sgstAmt: 0,
       igstAmt: 0,
