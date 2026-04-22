@@ -38,7 +38,7 @@ const Dashboard = () => {
   const canSeePayment = isAdmin || isCRM || isAccounts || isFinance || isVRN;
 
   // ✅ Office Dropdown → PAYMENT user bhi dekh sakta hai (Bill Entry ke liye)
-  const canSeeOffice = isAdmin || isAccounts || isFinance;
+  const canSeeOffice = isAdmin || isAccounts || isFinance || isVRN;
 
   // Individual Menu Items Permissions
   const canSeeSchedulePayment = isAdmin || isCRM || isAccounts || isFinance || isVRN;
@@ -47,7 +47,7 @@ const Dashboard = () => {
   const canSeeTransferBankToBank = isAdmin || isFinance;
   const canSeePaymentForm = isAdmin || isFinance;
 
-  const canSeeApprovel = isAdmin;
+  const canSeeApprovel = isAdmin ||isVRN ;
   
   // ✅ PAYMENT (isFinance) ko Bill Entry dikhega
   const canSeeBillEntry = isAdmin || isAccounts || isFinance;
