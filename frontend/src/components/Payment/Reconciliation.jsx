@@ -458,8 +458,8 @@ const Reconciliation = () => {
                           key={item.uid || item.paymentDetails}
                           className="hover:bg-indigo-50/50 transition-colors"
                         >
-                          <td className="px-6 py-5 text-gray-700">{item.timestamp || "-"}</td>
                           <td className="px-6 py-5 font-medium text-indigo-700">{item.uid}</td>
+                          <td className="px-6 py-5 text-gray-700">{item.timestamp || "-"}</td>
                           <td className="px-6 py-5 text-gray-800">{item.contractorName || "-"}</td>
                           <td className="px-6 py-5 font-medium text-emerald-700">
                             ₹{item.paidAmount || "0"}

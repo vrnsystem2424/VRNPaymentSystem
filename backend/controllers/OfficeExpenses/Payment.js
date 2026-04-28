@@ -78,12 +78,120 @@ router.get('/Get-Payment', async (req, res) => {
 });
 
 // POST route
+// router.post('/Post-Payment', async (req, res) => {
+//   try {
+//     const {
+//       uid,
+//       STATUS_5,
+//       NET_AMOUNT_5,
+//       PAID_AMOUNT_5,
+//       BALANCE_AMOUNT_5,
+//       BANK_DETAILS_5,
+//       PAYMENT_MODE_5,
+//       PAYMENT_DETAILS_5,
+//       PAYMENT_DATE_5,
+//       Remark_5,
+//     } = req.body;
+
+//     console.log('Received body:', req.body);
+
+//     if (!uid) {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'UID is required',
+//       });
+//     }
+
+//     const trimmedUid = String(uid).trim();
+//     console.log('Trimmed UID being searched:', trimmedUid);
+
+//     const getResponse = await sheets.spreadsheets.values.get({
+//       spreadsheetId: OfficeExpenseID,
+//       range: 'VRN_Office_Expenses!C7:C',
+//     });
+
+//     const values = getResponse.data.values || [];
+//     console.log(`Total rows found in column C: ${values.length}`);
+
+//     const rowIndex = values.findIndex((row) => {
+//       const cell = row && row[0] ? String(row[0]).trim() : '';
+//       return cell === trimmedUid;
+//     });
+
+//     if (rowIndex === -1) {
+//       console.log('No match. First 10 UIDs in sheet:');
+//       const sample = values.slice(0, 10).map((row, i) => ({
+//         row: 7 + i,
+//         uid: row?.[0] ? String(row[0]).trim() : 'EMPTY',
+//       }));
+//       console.log(sample);
+
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Row not found with this UID',
+//         searchedFor: trimmedUid,
+//         rowsChecked: values.length,
+//       });
+//     }
+
+//     const sheetRowNumber = 7 + rowIndex;
+//     console.log(`Match found → Updating row: ${sheetRowNumber}`);
+
+//     const updates = [
+//       { range: `VRN_Office_Expenses!BB${sheetRowNumber}`, values: [[STATUS_5 || '']] },
+//       { range: `VRN_Office_Expenses!BD${sheetRowNumber}`, values: [[NET_AMOUNT_5 || '']] },
+//       { range: `VRN_Office_Expenses!BE${sheetRowNumber}`, values: [[PAID_AMOUNT_5 || '']] },
+//       { range: `VRN_Office_Expenses!BF${sheetRowNumber}`, values: [[BALANCE_AMOUNT_5 || '']] },
+//       { range: `VRN_Office_Expenses!BG${sheetRowNumber}`, values: [[BANK_DETAILS_5 || '']] },
+//       { range: `VRN_Office_Expenses!BH${sheetRowNumber}`, values: [[PAYMENT_MODE_5 || '']] },
+//       { range: `VRN_Office_Expenses!BI${sheetRowNumber}`, values: [[PAYMENT_DETAILS_5 || '']] },
+//       { range: `VRN_Office_Expenses!BJ${sheetRowNumber}`, values: [[PAYMENT_DATE_5 || '']] },
+//       { range: `VRN_Office_Expenses!BK${sheetRowNumber}`, values: [[Remark_5 || '']] },
+//     ];
+
+//     const validUpdates = updates.filter((update) => update.values[0][0] !== '');
+
+//     if (validUpdates.length === 0) {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'No valid fields to update',
+//       });
+//     }
+
+//     await sheets.spreadsheets.values.batchUpdate({
+//       spreadsheetId: OfficeExpenseID,
+//       resource: {
+//         valueInputOption: 'USER_ENTERED',
+//         data: validUpdates,
+//       },
+//     });
+
+//     console.log(`Update successful for row ${sheetRowNumber} — ${validUpdates.length} fields updated`);
+
+//     return res.json({
+//       success: true,
+//       message: 'Payment data updated successfully',
+//       updatedRow: sheetRowNumber,
+//       updatedFields: validUpdates.map((u) => u.range.split('!')[1]),
+//     });
+//   } catch (error) {
+//     console.error('Payment POST Error:', error);
+//     return res.status(500).json({
+//       success: false,
+//       message: 'Server error while updating sheet',
+//       error: error.message,
+//     });
+//   }
+// });
+
+
 router.post('/Post-Payment', async (req, res) => {
   try {
     const {
       uid,
       STATUS_5,
       NET_AMOUNT_5,
+      TDS_5,
       PAID_AMOUNT_5,
       BALANCE_AMOUNT_5,
       BANK_DETAILS_5,
@@ -137,16 +245,58 @@ router.post('/Post-Payment', async (req, res) => {
     const sheetRowNumber = 7 + rowIndex;
     console.log(`Match found → Updating row: ${sheetRowNumber}`);
 
+    /*
+     * Column mapping (Stage 5):
+     * BB → STATUS_5
+     * BC → (reserved / skip)
+     * BD → NET_AMOUNT_5
+     * BE → TDS_5
+     * BF → NET_AMOUNT_5   (Balance column = Net Amount)
+     * BG → (PAID_AMOUNT — skipped)
+     * BH → BANK_DETAILS_5
+     * BI → PAYMENT_MODE_5
+     * BJ → PAYMENT_DETAILS_5
+     * BK → PAYMENT_DATE_5
+     * BL → Remark_5
+     */
     const updates = [
-      { range: `VRN_Office_Expenses!BB${sheetRowNumber}`, values: [[STATUS_5 || '']] },
-      { range: `VRN_Office_Expenses!BD${sheetRowNumber}`, values: [[NET_AMOUNT_5 || '']] },
-      { range: `VRN_Office_Expenses!BE${sheetRowNumber}`, values: [[PAID_AMOUNT_5 || '']] },
-      { range: `VRN_Office_Expenses!BF${sheetRowNumber}`, values: [[BALANCE_AMOUNT_5 || '']] },
-      { range: `VRN_Office_Expenses!BG${sheetRowNumber}`, values: [[BANK_DETAILS_5 || '']] },
-      { range: `VRN_Office_Expenses!BH${sheetRowNumber}`, values: [[PAYMENT_MODE_5 || '']] },
-      { range: `VRN_Office_Expenses!BI${sheetRowNumber}`, values: [[PAYMENT_DETAILS_5 || '']] },
-      { range: `VRN_Office_Expenses!BJ${sheetRowNumber}`, values: [[PAYMENT_DATE_5 || '']] },
-      { range: `VRN_Office_Expenses!BK${sheetRowNumber}`, values: [[Remark_5 || '']] },
+      {
+        range: `VRN_Office_Expenses!BB${sheetRowNumber}`,
+        values: [[STATUS_5 || '']],
+      },
+      {
+        range: `VRN_Office_Expenses!BD${sheetRowNumber}`,
+        values: [[NET_AMOUNT_5 || '']],         // NET AMOUNT
+      },
+      {
+        range: `VRN_Office_Expenses!BE${sheetRowNumber}`,
+        values: [[TDS_5 || '']],                // TDS
+      },
+     {
+  range: `VRN_Office_Expenses!BF${sheetRowNumber}`,
+  values: [[BALANCE_AMOUNT_5 || '']],
+},
+      // BG → PAID_AMOUNT skipped
+      {
+        range: `VRN_Office_Expenses!BG${sheetRowNumber}`,
+        values: [[BANK_DETAILS_5 || '']],
+      },
+      {
+        range: `VRN_Office_Expenses!BH${sheetRowNumber}`,
+        values: [[PAYMENT_MODE_5 || '']],
+      },
+      {
+        range: `VRN_Office_Expenses!BI${sheetRowNumber}`,
+        values: [[PAYMENT_DETAILS_5 || '']],
+      },
+      {
+        range: `VRN_Office_Expenses!BJ${sheetRowNumber}`,
+        values: [[PAYMENT_DATE_5 || '']],
+      },
+      {
+        range: `VRN_Office_Expenses!BK${sheetRowNumber}`,
+        values: [[Remark_5 || '']],
+      },
     ];
 
     const validUpdates = updates.filter((update) => update.values[0][0] !== '');
@@ -166,14 +316,16 @@ router.post('/Post-Payment', async (req, res) => {
       },
     });
 
-    console.log(`Update successful for row ${sheetRowNumber} — ${validUpdates.length} fields updated`);
+    console.log(`✅ Updated row ${sheetRowNumber} — ${validUpdates.length} fields`);
 
     return res.json({
       success: true,
       message: 'Payment data updated successfully',
       updatedRow: sheetRowNumber,
+      tdsApplied: TDS_5 ? Number(TDS_5) : 0,
       updatedFields: validUpdates.map((u) => u.range.split('!')[1]),
     });
+
   } catch (error) {
     console.error('Payment POST Error:', error);
     return res.status(500).json({

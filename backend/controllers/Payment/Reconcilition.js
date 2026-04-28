@@ -47,7 +47,7 @@ router.get('/bank-balance/:bankName', async (req, res) => {
     console.log('Requested Bank:', bankName);
 
     // Sheet name ko single quotes mein wrap karo (safe way)
-    const range = `'${bankName}'!H3`;
+    const range = `'${bankName}'!F3`;
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId : RECONCILITION_ID,
