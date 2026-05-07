@@ -1,3 +1,620 @@
+// const express = require('express');
+// const router = express.Router();
+// const { Readable } = require('stream');
+// const { sheets, drive, OfficeExpenseID } = require('../../config/googleSheet');
+
+// // ============================================
+// // Helper: Upload Photo to Google Drive
+// // ============================================
+// async function uploadToGoogleDrive(base64Data, fileName) {
+//   if (
+//     !base64Data ||
+//     typeof base64Data !== 'string' ||
+//     !base64Data.startsWith('data:')
+//   ) {
+//     return '';
+//   }
+
+//   const match = base64Data.match(
+//     /^data:([a-zA-Z0-9\/\-\+\.]+);base64,(.+)$/
+//   );
+//   if (!match) return '';
+
+//   const mimeType = match[1] || 'image/jpeg';
+//   const buffer = Buffer.from(match[2], 'base64');
+
+//   try {
+//     const fileStream = new Readable();
+//     fileStream.push(buffer);
+//     fileStream.push(null);
+
+//     const res = await drive.files.create({
+//       resource: {
+//         name: fileName,
+//         parents: [process.env.GOOGLE_DRIVE_FOLDER_ID || 'root'],
+//       },
+//       media: { mimeType, body: fileStream },
+//       fields: 'id',
+//       supportsAllDrives: true,
+//     });
+
+//     const fileId = res.data.id;
+
+//     await drive.permissions.create({
+//       fileId,
+//       requestBody: { role: 'reader', type: 'anyone' },
+//       supportsAllDrives: true,
+//     });
+
+//     return `https://drive.google.com/uc?export=view&id=${fileId}`;
+//   } catch (error) {
+//     console.error(`Drive upload failed for ${fileName}:`, error.message);
+//     return '';
+//   }
+// }
+
+// // ============================================
+// // Helper: Get IST Timestamp
+// // ============================================
+// function getISTTimestamp() {
+//   const now = new Date();
+//   const istOffset = 5.5 * 60 * 60 * 1000;
+//   const istDate = new Date(now.getTime() + istOffset);
+
+//   const dd = String(istDate.getUTCDate()).padStart(2, '0');
+//   const mm = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+//   const yyyy = istDate.getUTCFullYear();
+//   const hh = String(istDate.getUTCHours()).padStart(2, '0');
+//   const min = String(istDate.getUTCMinutes()).padStart(2, '0');
+//   const ss = String(istDate.getUTCSeconds()).padStart(2, '0');
+
+//   return `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
+// }
+
+// // ============================================
+// // Helper: Generate Bill Number
+// // ============================================
+// async function generateBillNumber() {
+//   try {
+//     const response = await sheets.spreadsheets.values.get({
+//       spreadsheetId: OfficeExpenseID,      
+//       range: 'VRN_Office_Expenses!B:B',
+//     });
+
+//     const rows = response.data.values || [];
+//     let maxNumber = 0;
+
+//     for (let i = 7; i < rows.length; i++) {
+//       const billNo = rows[i]?.[0];
+//       if (billNo && billNo.startsWith('Dim')) {
+//         const num = parseInt(billNo.replace('Dim', ''));
+//         if (!isNaN(num) && num > maxNumber) maxNumber = num;
+//       }
+//     }
+
+//     return `VRN${(maxNumber + 1).toString().padStart(4, '0')}`;
+//   } catch (error) {
+//     console.error('Error generating bill number:', error);
+//     return 'VRN0001';
+//   }
+// }
+
+// // ============================================
+// // Helper: Get Last UID
+// // ============================================
+// async function getLastUID() {
+//   try {
+//     const response = await sheets.spreadsheets.values.get({
+//       spreadsheetId: OfficeExpenseID,        // ✅ FIXED
+//       range: 'VRN_Office_Expenses!C:C',
+//     });
+
+//     const rows = response.data.values || [];
+//     let maxUID = 0;
+
+//     for (let i = 7; i < rows.length; i++) {
+//       const uid = parseInt(rows[i]?.[0]);
+//       if (!isNaN(uid) && uid > maxUID) maxUID = uid;
+//     }
+
+//     return maxUID;
+//   } catch (error) {
+//     console.error('Error getting last UID:', error);
+//     return 0;
+//   }
+// }
+
+// // ============================================
+// // Helper: Get Available Rows
+// // ============================================
+// async function getAvailableRows(needed) {
+//   try {
+//     const response = await sheets.spreadsheets.values.get({
+//       spreadsheetId: OfficeExpenseID,
+//       range: 'VRN_Office_Expenses!A:A',
+//     });
+
+//     const rows = response.data.values || [];
+//     const emptyRows = [];
+
+//     // ✅ FIX: i = 8 matlab Row 9 se start (pehle i = 7 tha jo Row 8 tha)
+//     for (let i = 8; i < rows.length; i++) {
+//       const cellValue = rows[i]?.[0];
+//       const isEmpty = !cellValue || cellValue.toString().trim() === '';
+
+//       if (isEmpty) {
+//         emptyRows.push(i + 1); // i+1 = sheet ka actual row number
+//       }
+
+//       if (emptyRows.length === needed) break;
+//     }
+
+//     if (emptyRows.length < needed) {
+//       const totalRows = Math.max(rows.length, 8);
+//       const startAppend = totalRows + 1;
+//       const stillNeeded = needed - emptyRows.length;
+
+//       for (let i = 0; i < stillNeeded; i++) {
+//         emptyRows.push(startAppend + i);
+//       }
+//     }
+
+//     return emptyRows;
+
+//   } catch (error) {
+//     console.error('Error getting available rows:', error);
+//     return Array.from({ length: needed }, (_, i) => 9 + i); // ✅ fallback bhi Row 9 se
+//   }
+// }
+
+// // ============================================
+// // GET Route - Project Data
+// // ============================================
+
+
+// router.get('/Dropdown-Data', async (req, res) => {
+//   try {
+//     const { 
+//       action, 
+//       subhead, 
+//       itemName, 
+//       getFormRaised, 
+//       getProjectName  // ✅ naya param
+//     } = req.query;
+
+//     const response = await sheets.spreadsheets.values.get({
+//       spreadsheetId: OfficeExpenseID,
+//       range: 'Project_Data!D4:L',  // ✅ D se L tak
+//     });
+
+//     const rows = response.data.values;
+
+//     if (!rows || rows.length === 0) {
+//       return res.status(404).json({ error: 'No data found' });
+//     }
+
+//     // ----------------------------------------
+//     // Header Row Dhundo
+//     // ----------------------------------------
+//     let headerRowIndex = 0;
+//     let headers = [];
+
+//     for (let i = 0; i < rows.length; i++) {
+//       const row = rows[i];
+//       if (
+//         row &&
+//         row.length > 0 &&
+//         (row[0] === 'Dimension_Subhead_Name' || row[1] === 'ITEM_NAME')
+//       ) {
+//         headerRowIndex = i;
+//         headers = row;
+//         break;
+//       }
+//     }
+
+//     if (headers.length === 0) {
+//       headerRowIndex = 0;
+//       headers = [
+//         'Dimension_Subhead_Name', // D = index 0
+//         'ITEM_NAME',              // E = index 1
+//         'Unit',                   // F = index 2
+//         'SKU CODE',               // G = index 3
+//         '',                       // H = index 4
+//         '',                       // I = index 5
+//         'Form_Raised_Form',       // J = index 6
+//         '',                       // K = index 7
+//         'Project_Name',           // L = index 8 ✅
+//       ];
+//     }
+
+//     const dataRows = rows
+//       .slice(headerRowIndex + 1)
+//       .filter((row) => row && row.length > 0 && row[0]);
+
+//     // ----------------------------------------
+//     // Column Indexes
+//     // ----------------------------------------
+//     const subheadIndex      = 0;  // D
+//     const itemNameIndex     = 1;  // E
+//     const unitIndex         = 2;  // F
+//     const skuCodeIndex      = 3;  // G
+//     const formRaisedIndex   = 6;  // J
+//     const projectNameIndex  = 8;  // L ✅
+
+//     // ----------------------------------------
+//     // ✅ NEW Case: Project Name Dropdown
+//     // ----------------------------------------
+//     if (getProjectName === 'true') {
+//       const uniqueProjectNames = [
+//         ...new Set(
+//           dataRows
+//             .map((row) => row[projectNameIndex])
+//             .filter(Boolean)
+//         ),
+//       ];
+
+//       console.log('Project Names fetched:', uniqueProjectNames);
+//       return res.json({ 
+//         type: 'projectName', 
+//         data: uniqueProjectNames 
+//       });
+//     }
+
+//     // ----------------------------------------
+//     // Case 1: Form Raised by Subhead
+//     // ----------------------------------------
+//     if (getFormRaised === 'true' && subhead) {
+//       const uniqueFormRaised = [
+//         ...new Set(
+//           dataRows
+//             .filter((row) => row[subheadIndex] === subhead)
+//             .map((row) => row[formRaisedIndex])
+//             .filter(Boolean)
+//         ),
+//       ];
+//       return res.json({ type: 'formRaised', data: uniqueFormRaised });
+//     }
+
+//     // ----------------------------------------
+//     // Case 2: All Data
+//     // ----------------------------------------
+//     if (action === 'all-data') {
+//       const subheadMap = new Map();
+
+//       dataRows.forEach((row) => {
+//         const subheadVal = row[subheadIndex];
+//         if (!subheadVal) return;
+
+//         if (!subheadMap.has(subheadVal)) {
+//           subheadMap.set(subheadVal, {
+//             subhead: subheadVal,
+//             items: [],
+//             formRaised: new Set(),
+//           });
+//         }
+
+//         const subheadData = subheadMap.get(subheadVal);
+//         const itemNameVal = row[itemNameIndex];
+
+//         if (itemNameVal) {
+//           subheadData.items.push({
+//             itemName:    itemNameVal,
+//             unit:        row[unitIndex]          || '',
+//             skuCode:     row[skuCodeIndex]       || '',
+//             formRaised:  row[formRaisedIndex]    || '',
+//             projectName: row[projectNameIndex]   || '', // ✅
+//           });
+//         }
+
+//         if (row[formRaisedIndex]) {
+//           subheadData.formRaised.add(row[formRaisedIndex]);
+//         }
+//       });
+
+//       const allData = Array.from(subheadMap.values()).map((s) => ({
+//         subhead:    s.subhead,
+//         items:      s.items,
+//         formRaised: Array.from(s.formRaised),
+//       }));
+
+//       return res.json({ type: 'all-data', data: allData });
+//     }
+
+//     // ----------------------------------------
+//     // Case 3: Sirf Subheads
+//     // ----------------------------------------
+//     if (!subhead && !itemName) {
+//       const uniqueSubheads = [
+//         ...new Set(dataRows.map((row) => row[subheadIndex])),
+//       ].filter(Boolean);
+//       return res.json({ type: 'subheads', data: uniqueSubheads });
+//     }
+
+//     // ----------------------------------------
+//     // Case 4: Items by Subhead
+//     // ----------------------------------------
+//     if (subhead && !itemName) {
+//       const filteredItems = dataRows
+//         .filter((row) => row[subheadIndex] === subhead)
+//         .map((row) => ({
+//           itemName:    row[itemNameIndex],
+//           unit:        row[unitIndex]        || '',
+//           skuCode:     row[skuCodeIndex]     || '',
+//           formRaised:  row[formRaisedIndex]  || '',
+//           projectName: row[projectNameIndex] || '', // ✅
+//         }))
+//         .filter((item) => item.itemName);
+
+//       return res.json({ type: 'items', data: filteredItems });
+//     }
+
+//     // ----------------------------------------
+//     // Case 5: Item Details
+//     // ----------------------------------------
+//     if (subhead && itemName) {
+//       const selectedItem = dataRows.find(
+//         (row) =>
+//           row[subheadIndex] === subhead && 
+//           row[itemNameIndex] === itemName
+//       );
+
+//       if (!selectedItem) {
+//         return res.status(404).json({ error: 'Item not found' });
+//       }
+
+//       return res.json({
+//         type: 'details',
+//         data: {
+//           unit:        selectedItem[unitIndex]        || '',
+//           skuCode:     selectedItem[skuCodeIndex]     || '',
+//           formRaised:  selectedItem[formRaisedIndex]  || '',
+//           projectName: selectedItem[projectNameIndex] || '', // ✅
+//         },
+//       });
+//     }
+
+//     return res.status(400).json({ error: 'Invalid request' });
+
+//   } catch (error) {
+//     console.error('GET Error:', error);
+//     return res.status(500).json({
+//       error: 'Internal server error',
+//       details: error.message,
+//     });
+//   }
+// });
+
+
+// // ============================================
+// // POST Route - Submit Payment Data
+// // ============================================
+// // router.post('/post-form-data', async (req, res) => {
+// //   try {
+// //     const { officeName, payeeName, expensesHead, items, remarks } = req.body;
+
+// //     // ----------------------------------------
+// //     // Validation
+// //     // ----------------------------------------
+// //     if (
+// //       !officeName ||
+// //       !payeeName ||
+// //       !expensesHead ||
+// //       !items ||
+// //       items.length === 0
+// //     ) {
+// //       return res.status(400).json({ error: 'Missing required fields' });
+// //     }
+
+// //     const timestamp = getISTTimestamp();
+
+// //     const billNumber = await generateBillNumber();
+// //     const lastUID = await getLastUID();
+// //     const availableRows = await getAvailableRows(items.length);
+
+// //     console.log(
+// //       `billNumber: ${billNumber} | lastUID: ${lastUID} | rows: ${availableRows}`
+// //     );
+
+// //     const batchData = [];
+// //     const uploadedPhotos = [];
+
+// //     for (let i = 0; i < items.length; i++) {
+// //       const item = items[i];
+// //       const rowNum = availableRows[i];
+// //       const uid = lastUID + (i + 1);
+
+// //       let billPhotoUrl = '';
+// //       if (item.billPhoto && item.billPhoto.startsWith('data:')) {
+// //         const uniqueId = `${billNumber}_uid${uid}_${Date.now()}`;
+// //         billPhotoUrl = await uploadToGoogleDrive(
+// //           item.billPhoto,
+// //           `bill_${uniqueId}.jpg`
+// //         );
+// //         uploadedPhotos.push(billPhotoUrl);
+// //       }
+
+// //       const rowData = new Array(17).fill('');
+
+// //       rowData[0] = timestamp;
+// //       rowData[1] = billNumber;
+// //       rowData[2] = uid;
+// //       rowData[3] = officeName;
+// //       rowData[4] = payeeName;
+// //       rowData[6] = item.subhead;
+// //       rowData[7] = item.itemName;
+// //       rowData[8] = item.unit;
+// //       rowData[9] = item.skuCode;
+// //       rowData[10] = item.quantity;
+// //       rowData[11] = item.amount;
+// //       rowData[14] = item.formRaisedBy;
+// //       rowData[15] = billPhotoUrl;
+// //       rowData[16] = remarks || '';
+
+// //       batchData.push({
+// //         range: `VRN_Office_Expenses!A${rowNum}:Q${rowNum}`,
+// //         values: [rowData],
+// //       });
+// //     }
+
+// //     // ----------------------------------------
+// //     // Google Sheets Batch Update
+// //     // ----------------------------------------
+// //     await sheets.spreadsheets.values.batchUpdate({
+// //       spreadsheetId: OfficeExpenseID,        // ✅ FIXED
+// //       requestBody: {
+// //         valueInputOption: 'USER_ENTERED',
+// //         data: batchData,
+// //       },
+// //     });
+
+// //     const totalAmount = items.reduce(
+// //       (sum, item) => sum + (parseFloat(item.amount) || 0),
+// //       0
+// //     );
+
+// //     return res.status(201).json({
+// //       success: true,
+// //       message: `${items.length} item(s) submitted successfully`,
+// //       data: {
+// //         billNumber,
+// //         timestamp,
+// //         totalItems: items.length,
+// //         totalAmount,
+// //         billPhotos: uploadedPhotos,
+// //       },
+// //     });
+
+// //   } catch (error) {
+// //     console.error('POST Error:', error);
+// //     return res.status(500).json({
+// //       error: 'Internal server error',
+// //       details: error.message,
+// //     });
+// //   }
+// // });
+
+
+
+
+// router.post('/post-form-data', async (req, res) => {
+//   try {
+//     const { officeName, payeeName, expensesHead, items, remarks } = req.body;
+
+//     // ----------------------------------------
+//     // Validation
+//     // ----------------------------------------
+//     if (
+//       !officeName ||
+//       !payeeName ||
+//       !expensesHead ||
+//       !items ||
+//       items.length === 0
+//     ) {
+//       return res.status(400).json({ error: 'Missing required fields' });
+//     }
+
+//     const timestamp = getISTTimestamp();
+//     const billNumber = await generateBillNumber();
+//     const lastUID = await getLastUID();
+//     const availableRows = await getAvailableRows(items.length);
+
+//     console.log(
+//       `billNumber: ${billNumber} | lastUID: ${lastUID} | rows: ${availableRows}`
+//     );
+
+//     const batchData = [];
+//     const uploadedPhotos = [];
+
+//     for (let i = 0; i < items.length; i++) {
+//       const item = items[i];
+//       const rowNum = availableRows[i];
+//       const uid = lastUID + (i + 1);
+
+//       // ✅ Bill Photo Upload
+//       let billPhotoUrl = '';
+//       if (item.billPhoto && item.billPhoto.startsWith('data:')) {
+//         const uniqueId = `${billNumber}_uid${uid}_${Date.now()}`;
+//         billPhotoUrl = await uploadToGoogleDrive(
+//           item.billPhoto,
+//           `bill_${uniqueId}.jpg`
+//         );
+//         uploadedPhotos.push(billPhotoUrl);
+//       }
+
+//       // ✅ 17 columns (A to Q) - Payment Mode NAHI hai is sheet mein
+//       const rowData = new Array(17).fill('');
+
+//       rowData[0]  = timestamp;              // A: Timestamp
+//       rowData[1]  = billNumber;             // B: Office_Bill_No
+//       rowData[2]  = uid;                    // C: UID
+//       rowData[3]  = officeName;             // D: OFFICE_NAME
+//       rowData[4]  = payeeName;              // E: PAYEE_NAME
+//       rowData[5]  = item.subhead;           // F: EXPENSES_SUBHEAD
+//       rowData[6]  = item.itemName;          // G: ITEM_NAME
+//       rowData[7]  = item.description || ''; // H: DESCRIPTION
+//       rowData[8]  = item.unit;              // I: UNIT
+//       rowData[9]  = item.skuCode;           // J: SKU_CODE
+//       rowData[10] = item.quantity;          // K: QTY
+//       rowData[11] = item.amount;            // L: AMOUNT
+//       rowData[12] = '';                     // M: (empty)
+//       rowData[13] = '';                     // N: (empty)
+//       rowData[14] = item.formRaisedBy;      // O: RAISED_BY
+//       rowData[15] = billPhotoUrl;           // P: Bill_Photo
+//       rowData[16] = remarks || '';          // Q: REMARKS
+//       // ❌ Payment Mode intentionally excluded
+
+//       batchData.push({
+//         range: `VRN_Office_Expenses!A${rowNum}:Q${rowNum}`,
+//         values: [rowData],
+//       });
+//     }
+
+//     // ----------------------------------------
+//     // Google Sheets Batch Update
+//     // ----------------------------------------
+//     await sheets.spreadsheets.values.batchUpdate({
+//       spreadsheetId: OfficeExpenseID,
+//       requestBody: {
+//         valueInputOption: 'USER_ENTERED',
+//         data: batchData,
+//       },
+//     });
+
+//     const totalAmount = items.reduce(
+//       (sum, item) => sum + (parseFloat(item.amount) || 0),
+//       0
+//     );
+
+//     return res.status(201).json({
+//       success: true,
+//       message: `${items.length} item(s) submitted successfully`,
+//       data: {
+//         billNumber,
+//         timestamp,
+//         totalItems: items.length,
+//         totalAmount,
+//         billPhotos: uploadedPhotos,
+//       },
+//     });
+
+//   } catch (error) {
+//     console.error('POST Error:', error);
+//     return res.status(500).json({
+//       error: 'Internal server error',
+//       details: error.message,
+//     });
+//   }
+// });
+
+
+// module.exports = router;
+
+
+
+
+
+
+
 const express = require('express');
 const router = express.Router();
 const { Readable } = require('stream');
@@ -72,27 +689,39 @@ function getISTTimestamp() {
 }
 
 // ============================================
-// Helper: Generate Bill Number
+// Helper: Generate Bill Number ✅ FIXED
 // ============================================
 async function generateBillNumber() {
   try {
     const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: OfficeExpenseID,        // ✅ FIXED
+      spreadsheetId: OfficeExpenseID,
       range: 'VRN_Office_Expenses!B:B',
     });
 
     const rows = response.data.values || [];
     let maxNumber = 0;
 
-    for (let i = 7; i < rows.length; i++) {
+    console.log(`Total rows fetched: ${rows.length}`);
+
+    // ✅ Row 9 se start (index 8)
+    for (let i = 8; i < rows.length; i++) {
       const billNo = rows[i]?.[0];
-      if (billNo && billNo.startsWith('Dim')) {
-        const num = parseInt(billNo.replace('Dim', ''));
-        if (!isNaN(num) && num > maxNumber) maxNumber = num;
+
+      // ✅ FIXED: VRN prefix check
+      if (billNo && billNo.toString().trim().startsWith('VRN')) {
+        const numStr = billNo.toString().trim().replace('VRN', '');
+        const num = parseInt(numStr);
+        if (!isNaN(num) && num > maxNumber) {
+          maxNumber = num;
+        }
       }
     }
 
-    return `VRN${(maxNumber + 1).toString().padStart(4, '0')}`;
+    const nextNumber = `VRN${(maxNumber + 1).toString().padStart(4, '0')}`;
+    console.log(`✅ Generated Bill Number: ${nextNumber} (max was: ${maxNumber})`);
+
+    return nextNumber;
+
   } catch (error) {
     console.error('Error generating bill number:', error);
     return 'VRN0001';
@@ -100,24 +729,27 @@ async function generateBillNumber() {
 }
 
 // ============================================
-// Helper: Get Last UID
+// Helper: Get Last UID ✅ VERIFIED
 // ============================================
 async function getLastUID() {
   try {
     const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: OfficeExpenseID,        // ✅ FIXED
+      spreadsheetId: OfficeExpenseID,
       range: 'VRN_Office_Expenses!C:C',
     });
 
     const rows = response.data.values || [];
     let maxUID = 0;
 
-    for (let i = 7; i < rows.length; i++) {
+    // ✅ Row 9 se start (index 8)
+    for (let i = 8; i < rows.length; i++) {
       const uid = parseInt(rows[i]?.[0]);
       if (!isNaN(uid) && uid > maxUID) maxUID = uid;
     }
 
+    console.log(`✅ Last UID found: ${maxUID}`);
     return maxUID;
+
   } catch (error) {
     console.error('Error getting last UID:', error);
     return 0;
@@ -125,7 +757,7 @@ async function getLastUID() {
 }
 
 // ============================================
-// Helper: Get Available Rows
+// Helper: Get Available Rows ✅ VERIFIED
 // ============================================
 async function getAvailableRows(needed) {
   try {
@@ -137,18 +769,19 @@ async function getAvailableRows(needed) {
     const rows = response.data.values || [];
     const emptyRows = [];
 
-    // ✅ FIX: i = 8 matlab Row 9 se start (pehle i = 7 tha jo Row 8 tha)
+    // ✅ Row 9 se start (index 8)
     for (let i = 8; i < rows.length; i++) {
       const cellValue = rows[i]?.[0];
       const isEmpty = !cellValue || cellValue.toString().trim() === '';
 
       if (isEmpty) {
-        emptyRows.push(i + 1); // i+1 = sheet ka actual row number
+        emptyRows.push(i + 1);
       }
 
       if (emptyRows.length === needed) break;
     }
 
+    // Agar sheet mein enough empty rows nahi hain
     if (emptyRows.length < needed) {
       const totalRows = Math.max(rows.length, 8);
       const startAppend = totalRows + 1;
@@ -159,213 +792,31 @@ async function getAvailableRows(needed) {
       }
     }
 
+    console.log(`✅ Available rows for ${needed} items:`, emptyRows);
     return emptyRows;
 
   } catch (error) {
     console.error('Error getting available rows:', error);
-    return Array.from({ length: needed }, (_, i) => 9 + i); // ✅ fallback bhi Row 9 se
+    return Array.from({ length: needed }, (_, i) => 9 + i);
   }
 }
 
 // ============================================
-// GET Route - Project Data
+// GET Route - Dropdown Data
 // ============================================
-
-
-// router.get('/Dropdown-Data', async (req, res) => {
-//   try {
-//     const { action, subhead, itemName, getFormRaised } = req.query;
-
-//     const response = await sheets.spreadsheets.values.get({
-//       spreadsheetId: OfficeExpenseID,        // ✅ FIXED
-//       range: 'Project_Data!D4:J',
-//     });
-
-//     const rows = response.data.values;
-
-//     if (!rows || rows.length === 0) {
-//       return res.status(404).json({ error: 'No data found' });
-//     }
-
-//     // ----------------------------------------
-//     // Header Row Dhundo
-//     // ----------------------------------------
-//     let headerRowIndex = 0;
-//     let headers = [];
-
-//     for (let i = 0; i < rows.length; i++) {
-//       const row = rows[i];
-//       if (
-//         row &&
-//         row.length > 0 &&
-//         (row[0] === 'Dimension_Subhead_Name' || row[1] === 'ITEM_NAME')
-//       ) {
-//         headerRowIndex = i;
-//         headers = row;
-//         break;
-//       }
-//     }
-
-//     if (headers.length === 0) {
-//       headerRowIndex = 0;
-//       headers = [
-//         'Dimension_Subhead_Name',
-//         'ITEM_NAME',
-//         'Unit',
-//         'SKU CODE',
-//         '',
-//         '',
-//         'Form_Raised_Form',
-//       ];
-//     }
-
-//     const dataRows = rows
-//       .slice(headerRowIndex + 1)
-//       .filter((row) => row && row.length > 0 && row[0]);
-
-//     // Column Indexes
-//     const subheadIndex = 0;
-//     const itemNameIndex = 1;
-//     const unitIndex = 2;
-//     const skuCodeIndex = 3;
-//     const formRaisedIndex = 6;
-
-//     // ----------------------------------------
-//     // Case 1: Form Raised by Subhead
-//     // ----------------------------------------
-//     if (getFormRaised === 'true' && subhead) {
-//       const uniqueFormRaised = [
-//         ...new Set(
-//           dataRows
-//             .filter((row) => row[subheadIndex] === subhead)
-//             .map((row) => row[formRaisedIndex])
-//             .filter(Boolean)
-//         ),
-//       ];
-//       return res.json({ type: 'formRaised', data: uniqueFormRaised });
-//     }
-
-//     // ----------------------------------------
-//     // Case 2: All Data
-//     // ----------------------------------------
-//     if (action === 'all-data') {
-//       const subheadMap = new Map();
-
-//       dataRows.forEach((row) => {
-//         const subheadVal = row[subheadIndex];
-//         if (!subheadVal) return;
-
-//         if (!subheadMap.has(subheadVal)) {
-//           subheadMap.set(subheadVal, {
-//             subhead: subheadVal,
-//             items: [],
-//             formRaised: new Set(),
-//           });
-//         }
-
-//         const subheadData = subheadMap.get(subheadVal);
-//         const itemNameVal = row[itemNameIndex];
-
-//         if (itemNameVal) {
-//           subheadData.items.push({
-//             itemName: itemNameVal,
-//             unit: row[unitIndex] || '',
-//             skuCode: row[skuCodeIndex] || '',
-//             formRaised: row[formRaisedIndex] || '',
-//           });
-//         }
-
-//         if (row[formRaisedIndex]) {
-//           subheadData.formRaised.add(row[formRaisedIndex]);
-//         }
-//       });
-
-//       const allData = Array.from(subheadMap.values()).map((s) => ({
-//         subhead: s.subhead,
-//         items: s.items,
-//         formRaised: Array.from(s.formRaised),
-//       }));
-
-//       console.log('All data loaded, total subheads:', allData.length);
-//       return res.json({ type: 'all-data', data: allData });
-//     }
-
-//     // ----------------------------------------
-//     // Case 3: Sirf Subheads
-//     // ----------------------------------------
-//     if (!subhead && !itemName) {
-//       const uniqueSubheads = [
-//         ...new Set(dataRows.map((row) => row[subheadIndex])),
-//       ].filter(Boolean);
-//       return res.json({ type: 'subheads', data: uniqueSubheads });
-//     }
-
-//     // ----------------------------------------
-//     // Case 4: Items by Subhead
-//     // ----------------------------------------
-//     if (subhead && !itemName) {
-//       const filteredItems = dataRows
-//         .filter((row) => row[subheadIndex] === subhead)
-//         .map((row) => ({
-//           itemName: row[itemNameIndex],
-//           unit: row[unitIndex] || '',
-//           skuCode: row[skuCodeIndex] || '',
-//           formRaised: row[formRaisedIndex] || '',
-//         }))
-//         .filter((item) => item.itemName);
-
-//       return res.json({ type: 'items', data: filteredItems });
-//     }
-
-//     // ----------------------------------------
-//     // Case 5: Item Details
-//     // ----------------------------------------
-//     if (subhead && itemName) {
-//       const selectedItem = dataRows.find(
-//         (row) =>
-//           row[subheadIndex] === subhead && row[itemNameIndex] === itemName
-//       );
-
-//       if (!selectedItem) {
-//         return res.status(404).json({ error: 'Item not found' });
-//       }
-
-//       return res.json({
-//         type: 'details',
-//         data: {
-//           unit: selectedItem[unitIndex] || '',
-//           skuCode: selectedItem[skuCodeIndex] || '',
-//           formRaised: selectedItem[formRaisedIndex] || '',
-//         },
-//       });
-//     }
-
-//     return res.status(400).json({ error: 'Invalid request' });
-
-//   } catch (error) {
-//     console.error('GET Error:', error);
-//     return res.status(500).json({
-//       error: 'Internal server error',
-//       details: error.message,
-//     });
-//   }
-// });
-
-
-
 router.get('/Dropdown-Data', async (req, res) => {
   try {
-    const { 
-      action, 
-      subhead, 
-      itemName, 
-      getFormRaised, 
-      getProjectName  // ✅ naya param
+    const {
+      action,
+      subhead,
+      itemName,
+      getFormRaised,
+      getProjectName
     } = req.query;
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: OfficeExpenseID,
-      range: 'Project_Data!D4:L',  // ✅ D se L tak
+      range: 'Project_Data!D4:L',
     });
 
     const rows = response.data.values;
@@ -374,9 +825,7 @@ router.get('/Dropdown-Data', async (req, res) => {
       return res.status(404).json({ error: 'No data found' });
     }
 
-    // ----------------------------------------
-    // Header Row Dhundo
-    // ----------------------------------------
+    // Header Row
     let headerRowIndex = 0;
     let headers = [];
 
@@ -396,15 +845,15 @@ router.get('/Dropdown-Data', async (req, res) => {
     if (headers.length === 0) {
       headerRowIndex = 0;
       headers = [
-        'Dimension_Subhead_Name', // D = index 0
-        'ITEM_NAME',              // E = index 1
-        'Unit',                   // F = index 2
-        'SKU CODE',               // G = index 3
-        '',                       // H = index 4
-        '',                       // I = index 5
-        'Form_Raised_Form',       // J = index 6
-        '',                       // K = index 7
-        'Project_Name',           // L = index 8 ✅
+        'Dimension_Subhead_Name',
+        'ITEM_NAME',
+        'Unit',
+        'SKU CODE',
+        '',
+        '',
+        'Form_Raised_Form',
+        '',
+        'Project_Name',
       ];
     }
 
@@ -412,19 +861,14 @@ router.get('/Dropdown-Data', async (req, res) => {
       .slice(headerRowIndex + 1)
       .filter((row) => row && row.length > 0 && row[0]);
 
-    // ----------------------------------------
-    // Column Indexes
-    // ----------------------------------------
-    const subheadIndex      = 0;  // D
-    const itemNameIndex     = 1;  // E
-    const unitIndex         = 2;  // F
-    const skuCodeIndex      = 3;  // G
-    const formRaisedIndex   = 6;  // J
-    const projectNameIndex  = 8;  // L ✅
+    const subheadIndex     = 0; // D
+    const itemNameIndex    = 1; // E
+    const unitIndex        = 2; // F
+    const skuCodeIndex     = 3; // G
+    const formRaisedIndex  = 6; // J
+    const projectNameIndex = 8; // L
 
-    // ----------------------------------------
-    // ✅ NEW Case: Project Name Dropdown
-    // ----------------------------------------
+    // Project Name Dropdown
     if (getProjectName === 'true') {
       const uniqueProjectNames = [
         ...new Set(
@@ -433,17 +877,10 @@ router.get('/Dropdown-Data', async (req, res) => {
             .filter(Boolean)
         ),
       ];
-
-      console.log('Project Names fetched:', uniqueProjectNames);
-      return res.json({ 
-        type: 'projectName', 
-        data: uniqueProjectNames 
-      });
+      return res.json({ type: 'projectName', data: uniqueProjectNames });
     }
 
-    // ----------------------------------------
-    // Case 1: Form Raised by Subhead
-    // ----------------------------------------
+    // Form Raised by Subhead
     if (getFormRaised === 'true' && subhead) {
       const uniqueFormRaised = [
         ...new Set(
@@ -456,9 +893,7 @@ router.get('/Dropdown-Data', async (req, res) => {
       return res.json({ type: 'formRaised', data: uniqueFormRaised });
     }
 
-    // ----------------------------------------
-    // Case 2: All Data
-    // ----------------------------------------
+    // All Data
     if (action === 'all-data') {
       const subheadMap = new Map();
 
@@ -480,10 +915,10 @@ router.get('/Dropdown-Data', async (req, res) => {
         if (itemNameVal) {
           subheadData.items.push({
             itemName:    itemNameVal,
-            unit:        row[unitIndex]          || '',
-            skuCode:     row[skuCodeIndex]       || '',
-            formRaised:  row[formRaisedIndex]    || '',
-            projectName: row[projectNameIndex]   || '', // ✅
+            unit:        row[unitIndex]        || '',
+            skuCode:     row[skuCodeIndex]     || '',
+            formRaised:  row[formRaisedIndex]  || '',
+            projectName: row[projectNameIndex] || '',
           });
         }
 
@@ -501,9 +936,7 @@ router.get('/Dropdown-Data', async (req, res) => {
       return res.json({ type: 'all-data', data: allData });
     }
 
-    // ----------------------------------------
-    // Case 3: Sirf Subheads
-    // ----------------------------------------
+    // Subheads only
     if (!subhead && !itemName) {
       const uniqueSubheads = [
         ...new Set(dataRows.map((row) => row[subheadIndex])),
@@ -511,9 +944,7 @@ router.get('/Dropdown-Data', async (req, res) => {
       return res.json({ type: 'subheads', data: uniqueSubheads });
     }
 
-    // ----------------------------------------
-    // Case 4: Items by Subhead
-    // ----------------------------------------
+    // Items by Subhead
     if (subhead && !itemName) {
       const filteredItems = dataRows
         .filter((row) => row[subheadIndex] === subhead)
@@ -522,20 +953,18 @@ router.get('/Dropdown-Data', async (req, res) => {
           unit:        row[unitIndex]        || '',
           skuCode:     row[skuCodeIndex]     || '',
           formRaised:  row[formRaisedIndex]  || '',
-          projectName: row[projectNameIndex] || '', // ✅
+          projectName: row[projectNameIndex] || '',
         }))
         .filter((item) => item.itemName);
 
       return res.json({ type: 'items', data: filteredItems });
     }
 
-    // ----------------------------------------
-    // Case 5: Item Details
-    // ----------------------------------------
+    // Item Details
     if (subhead && itemName) {
       const selectedItem = dataRows.find(
         (row) =>
-          row[subheadIndex] === subhead && 
+          row[subheadIndex] === subhead &&
           row[itemNameIndex] === itemName
       );
 
@@ -549,7 +978,7 @@ router.get('/Dropdown-Data', async (req, res) => {
           unit:        selectedItem[unitIndex]        || '',
           skuCode:     selectedItem[skuCodeIndex]     || '',
           formRaised:  selectedItem[formRaisedIndex]  || '',
-          projectName: selectedItem[projectNameIndex] || '', // ✅
+          projectName: selectedItem[projectNameIndex] || '',
         },
       });
     }
@@ -565,7 +994,6 @@ router.get('/Dropdown-Data', async (req, res) => {
   }
 });
 
-
 // ============================================
 // POST Route - Submit Payment Data
 // ============================================
@@ -573,9 +1001,6 @@ router.post('/post-form-data', async (req, res) => {
   try {
     const { officeName, payeeName, expensesHead, items, remarks } = req.body;
 
-    // ----------------------------------------
-    // Validation
-    // ----------------------------------------
     if (
       !officeName ||
       !payeeName ||
@@ -587,7 +1012,6 @@ router.post('/post-form-data', async (req, res) => {
     }
 
     const timestamp = getISTTimestamp();
-
     const billNumber = await generateBillNumber();
     const lastUID = await getLastUID();
     const availableRows = await getAvailableRows(items.length);
@@ -616,17 +1040,20 @@ router.post('/post-form-data', async (req, res) => {
 
       const rowData = new Array(17).fill('');
 
-      rowData[0] = timestamp;
-      rowData[1] = billNumber;
-      rowData[2] = uid;
-      rowData[3] = officeName;
-      rowData[4] = payeeName;
-      rowData[6] = item.subhead;
-      rowData[7] = item.itemName;
-      rowData[8] = item.unit;
-      rowData[9] = item.skuCode;
+      rowData[0]  = timestamp;
+      rowData[1]  = billNumber;
+      rowData[2]  = uid;
+      rowData[3]  = officeName;
+      rowData[4]  = payeeName;
+      rowData[5]  = item.subhead;
+      rowData[6]  = item.itemName;
+      rowData[7]  = item.description || '';
+      rowData[8]  = item.unit;
+      rowData[9]  = item.skuCode;
       rowData[10] = item.quantity;
       rowData[11] = item.amount;
+      rowData[12] = '';
+      rowData[13] = '';
       rowData[14] = item.formRaisedBy;
       rowData[15] = billPhotoUrl;
       rowData[16] = remarks || '';
@@ -637,11 +1064,8 @@ router.post('/post-form-data', async (req, res) => {
       });
     }
 
-    // ----------------------------------------
-    // Google Sheets Batch Update
-    // ----------------------------------------
     await sheets.spreadsheets.values.batchUpdate({
-      spreadsheetId: OfficeExpenseID,        // ✅ FIXED
+      spreadsheetId: OfficeExpenseID,
       requestBody: {
         valueInputOption: 'USER_ENTERED',
         data: batchData,

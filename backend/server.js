@@ -15,7 +15,7 @@ const Form = require('./controllers/Payment/Form')
 const Actual_Bank_In= require('./controllers/Payment/Actual_Bank_In')
 const Bank_to_bank_transfer=require('./controllers/Payment/bank_to_bank_Transfer')
 const officeForm=require('./controllers/OfficeExpenses/OfficeForm')
-
+const interestCharges= require('./controllers/Payment/Interest _Charges_Form')
 
 ///////
 const Aggrement= require('./controllers/UnitPosseion/Aggrement')
@@ -70,6 +70,9 @@ app.use('/api/payment',PaymentReconcilition)
 app.use('/api/payment',Form)
 app.use('/api/payment',Actual_Bank_In)
 app.use('/api/payment',Bank_to_bank_transfer)
+app.use('/api/payment',interestCharges)
+
+
 app.use('/api', leadsSummary)
 
 

@@ -19,7 +19,7 @@ import Approvel1 from "./components/OfficeExpenses/Approvel1";
 import BillEntry from "./components/OfficeExpenses/BillEntry";
 import ExpensesPayemnt from "./components/OfficeExpenses/ExpensesPayemnt";
 import OfficeForm from './components/OfficeExpenses/OfficeForm';
-
+import BankChargesInterestForm from "./components/Payment/BankChargesInterestForm";
 
 ////// Posseion CP
 
@@ -62,6 +62,7 @@ function App() {
             path="transfer-bank-to-bank"
             element={<Transfer_bank_To_bank />}
           />
+             <Route path='bankchargesinterest' element={<BankChargesInterestForm/>}/>
           <Route path="form" element={<Form />} />
           <Route path="Approvel1" element={<Approvel1 />} />
           <Route path="BillEntry" element={<BillEntry />} />
