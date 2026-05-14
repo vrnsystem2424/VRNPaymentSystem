@@ -66,75 +66,195 @@ router.get('/Get-Approvel-1', async (req, res) => {
 });
 
 // POST route
-router.post('/Post-Approvel-1', async (req, res) => {
+// router.post('/Post-Approvel-1', async (req, res) => {
+//   try {
+//     const { uid, STATUS_2, REVISED_AMOUNT_3, APPROVAL_DOER_2, REMARK_2 } = req.body;
+
+//     console.log("Received update body:", req.body);
+
+//     if (!uid) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "UID is required",
+//       });
+//     }
+
+//     const trimmedUid = uid.toString().trim();
+
+//     const findResponse = await sheets.spreadsheets.values.get({
+//       spreadsheetId : OfficeExpenseID,
+//       range: "VRN_Office_Expenses!C7:C",
+//     });
+
+//     const values = findResponse.data.values || [];
+
+//     const rowIndex = values.findIndex((row) => {
+//       if (row.length === 0) return false;
+//       const sheetValue = row[0] ? row[0].toString().trim() : "";
+//       return sheetValue === trimmedUid;
+//     });
+
+//     if (rowIndex === -1) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Row not found with this UID",
+//         searchedFor: uid,
+//       });
+//     }
+
+//     const sheetRowNumber = 7 + rowIndex;
+
+//     await sheets.spreadsheets.values.batchUpdate({
+//       spreadsheetId : OfficeExpenseID,
+//       resource: {
+//         valueInputOption: "USER_ENTERED",
+//         data: [
+//           {
+//             range: `VRN_Office_Expenses!W${sheetRowNumber}`,
+//             values: [[STATUS_2 || ""]],
+//           },
+//           {
+//             range: `VRN_Office_Expenses!Y${sheetRowNumber}`,
+//             values: [[REVISED_AMOUNT_3 || ""]],
+//           },
+//           {
+//             range: `VRN_Office_Expenses!Z${sheetRowNumber}`,
+//             values: [[APPROVAL_DOER_2 || ""]],
+//           },
+//           {
+//             range: `VRN_Office_Expenses!AA${sheetRowNumber}`,
+//             values: [[REMARK_2 || ""]],
+//           },
+//         ],
+//       },
+//     });
+
+//     return res.json({
+//       success: true,
+//       message: "Data updated successfully",
+//     });
+//   } catch (error) {
+//     console.error("DIM Approve1 POST Error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Server error",
+//       error: error.message,
+//     });
+//   }
+// });
+
+
+router.post('/Post-Approvel-1-Bulk', async (req, res) => {
   try {
-    const { uid, STATUS_2, REVISED_AMOUNT_3, APPROVAL_DOER_2, REMARK_2 } = req.body;
+    const { 
+      uids,
+      STATUS_2, 
+      PAYMENT_MODE_3,   // BANK or CASH
+      REMARK_2 
+    } = req.body;
 
-    console.log("Received update body:", req.body);
+    console.log("Bulk update body:", req.body);
 
-    if (!uid) {
+    // Validation
+    if (!uids || !Array.isArray(uids) || uids.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "UID is required",
+        message: "uids array is required",
       });
     }
 
-    const trimmedUid = uid.toString().trim();
+    if (!STATUS_2) {
+      return res.status(400).json({
+        success: false,
+        message: "STATUS_2 is required",
+      });
+    }
 
+    if (!PAYMENT_MODE_3) {
+      return res.status(400).json({
+        success: false,
+        message: "PAYMENT_MODE_3 is required",
+      });
+    }
+
+    // Sheet se C column fetch karo
     const findResponse = await sheets.spreadsheets.values.get({
-      spreadsheetId : OfficeExpenseID,
+      spreadsheetId: OfficeExpenseID,
       range: "VRN_Office_Expenses!C7:C",
     });
 
     const values = findResponse.data.values || [];
 
-    const rowIndex = values.findIndex((row) => {
-      if (row.length === 0) return false;
-      const sheetValue = row[0] ? row[0].toString().trim() : "";
-      return sheetValue === trimmedUid;
-    });
+    const updateData = [];
+    const results = [];
 
-    if (rowIndex === -1) {
-      return res.status(404).json({
-        success: false,
-        message: "Row not found with this UID",
-        searchedFor: uid,
+    for (const uid of uids) {
+      const trimmedUid = uid.toString().trim();
+
+      const rowIndex = values.findIndex((row) => {
+        if (row.length === 0) return false;
+        const sheetValue = row[0] ? row[0].toString().trim() : "";
+        return sheetValue === trimmedUid;
+      });
+
+      if (rowIndex === -1) {
+        results.push({ 
+          uid: trimmedUid, 
+          status: 'error', 
+          message: 'Row not found' 
+        });
+        continue;
+      }
+
+      const sheetRowNumber = 7 + rowIndex;
+
+      updateData.push(
+        {
+          range: `VRN_Office_Expenses!W${sheetRowNumber}`,
+          values: [[STATUS_2 || ""]],
+        },
+        {
+          range: `VRN_Office_Expenses!Z${sheetRowNumber}`,  // PAYMENT_MODE_3 column
+          values: [[PAYMENT_MODE_3 || ""]],
+        },
+        {
+          range: `VRN_Office_Expenses!AA${sheetRowNumber}`,
+          values: [[REMARK_2 || ""]],
+        }
+      );
+
+      results.push({ 
+        uid: trimmedUid, 
+        status: 'success',
+        sheetRow: sheetRowNumber
       });
     }
 
-    const sheetRowNumber = 7 + rowIndex;
+    // Ek batchUpdate mein sab
+    if (updateData.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: OfficeExpenseID,
+        resource: {
+          valueInputOption: "USER_ENTERED",
+          data: updateData,
+        },
+      });
+    }
 
-    await sheets.spreadsheets.values.batchUpdate({
-      spreadsheetId : OfficeExpenseID,
-      resource: {
-        valueInputOption: "USER_ENTERED",
-        data: [
-          {
-            range: `VRN_Office_Expenses!W${sheetRowNumber}`,
-            values: [[STATUS_2 || ""]],
-          },
-          {
-            range: `VRN_Office_Expenses!Y${sheetRowNumber}`,
-            values: [[REVISED_AMOUNT_3 || ""]],
-          },
-          {
-            range: `VRN_Office_Expenses!Z${sheetRowNumber}`,
-            values: [[APPROVAL_DOER_2 || ""]],
-          },
-          {
-            range: `VRN_Office_Expenses!AA${sheetRowNumber}`,
-            values: [[REMARK_2 || ""]],
-          },
-        ],
-      },
-    });
+    const successCount = results.filter(r => r.status === 'success').length;
+    const errorCount   = results.filter(r => r.status === 'error').length;
 
     return res.json({
       success: true,
-      message: "Data updated successfully",
+      message: `${successCount} updated, ${errorCount} failed`,
+      totalRequested: uids.length,
+      successCount,
+      errorCount,
+      results,
     });
+
   } catch (error) {
-    console.error("DIM Approve1 POST Error:", error);
+    console.error("Bulk Approve1 POST Error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",

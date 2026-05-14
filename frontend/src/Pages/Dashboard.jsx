@@ -1381,11 +1381,11 @@ const Dashboard = () => {
   const canSeeExpensesPayment = isAdmin || isAccounts || isFinance;
 
   // Possession Permissions
-  const canSeePossession = isAdmin;
-  const canSeeAgreement = isAdmin;
-  const canSeeRegistry = isAdmin;
-  const canSeePossessionEntry = isAdmin;
-  const canSeeChannelPartnerPayment = isAdmin;
+  const canSeePossession = isAdmin || isCRM;
+  const canSeeAgreement = isAdmin || isCRM;
+  const canSeeRegistry = isAdmin || isCRM;
+  const canSeePossessionEntry = isAdmin || isCRM;
+  const canSeeChannelPartnerPayment = isAdmin || isCRM;
 
   // Active state for highlighting
   const [isSummarySelected, setIsSummarySelected] = useState(false);
