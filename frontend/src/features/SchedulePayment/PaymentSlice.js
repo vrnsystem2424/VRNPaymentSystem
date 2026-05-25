@@ -1,4 +1,5 @@
 
+
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
 export const PaymentSlice = createApi({
@@ -22,10 +23,10 @@ export const PaymentSlice = createApi({
     }),
 
     updateReconciliation: builder.mutation({
-      query: ({ paymentDetails,bankDetails, bankClosingBalanceAfterPayment, status, remark }) => ({
+      query: (payload) => ({                              // ✅ poora payload accept karo
         url: '/api/payment/update-reconciliation',
         method: 'POST',
-        body: { paymentDetails,bankDetails, bankClosingBalanceAfterPayment, status, remark },
+        body: payload,                                    // ✅ poora payload bhejo
       }),
       invalidatesTags: ['ReconciliationData'],
     }),
@@ -35,9 +36,6 @@ export const PaymentSlice = createApi({
 export const {
   useGetPaymentReconciliationQuery,
   useGetBankClosingBalanceQuery,
-  useLazyGetBankClosingBalanceQuery, // ← Yeh naya export add kiya (lazy ke liye)
+  useLazyGetBankClosingBalanceQuery,
   useUpdateReconciliationMutation,
 } = PaymentSlice;
-
-
-

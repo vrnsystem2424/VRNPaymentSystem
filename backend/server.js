@@ -29,6 +29,11 @@ const officeExpenses = require('./controllers/OfficeExpenses/Approvel1')
 const BillEntry= require('./controllers/OfficeExpenses/BillEntry')
 const paymentOfficeExpenses= require('./controllers/OfficeExpenses/Payment')
 
+
+/////// 
+
+const SummaryMain = require('./controllers/Summary/SummaryMain')
+
 const app = express();
 // 1. CORS (Pehle daalo)
 app.use(cors({
@@ -83,7 +88,10 @@ app.use('/api/UnitPosseionFMS',Posesseion)
 app.use('/api/UnitPosseionFMS',CPPayment)
 
 
+/////// Summary
 
+
+app.use('/apiSummary',SummaryMain)
 
 // 7. Health Check
 app.get('/', (req, res) => {

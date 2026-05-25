@@ -28,6 +28,17 @@ import {cpPaymentApi} from './features/UnitPosseion/CPPaymentSlice'
 
 
 
+
+////////  summary 
+
+import { mainSummaryApi } from './features/Summary/mainSummarySlice';
+
+
+
+
+
+
+
 export const store = configureStore({
   reducer: {
     auth: authReducer,
@@ -52,6 +63,11 @@ export const store = configureStore({
     [posesseionApi.reducerPath]: posesseionApi.reducer,
     [registryApi.reducerPath]: registryApi.reducer,
     [cpPaymentApi.reducerPath]: cpPaymentApi.reducer,
+
+
+    /////// 
+
+    [mainSummaryApi.reducerPath]: mainSummaryApi.reducer,  // ← added mainSummaryApi reducer
    
   },
 
@@ -77,6 +93,13 @@ export const store = configureStore({
       .concat(posesseionApi.middleware)
       .concat(registryApi.middleware)
       .concat(cpPaymentApi.middleware)
+
+
+      //////
+
+
+
+      .concat(mainSummaryApi.middleware)  
       
 });
 

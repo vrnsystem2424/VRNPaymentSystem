@@ -31,7 +31,7 @@ const QualifideLeadsSheetId = process.env.SPREADSHEET_TOTAL_LEADS
 
 const RECONCILITION_ID= process.env.SPREADSHEET_RECONCILITION
 const OfficeExpenseID= process.env.SPREADSHEET_OfficeExpenses
-
-module.exports = { sheets, drive, spreadsheetId ,workSpredSheetId,QualifideLeadsSheetId,RECONCILITION_ID,OfficeExpenseID}; // Export drive
+const SummarySheetId= process.env.SPREADSHEET_ID_Summary
+module.exports = { sheets, drive, spreadsheetId ,workSpredSheetId,QualifideLeadsSheetId,RECONCILITION_ID,OfficeExpenseID,SummarySheetId}; // Export drive
 
 

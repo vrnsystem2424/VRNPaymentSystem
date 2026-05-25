@@ -75,7 +75,7 @@ export default function BillEntry() {
     const first = currentGroup[0];
     setVendorName(first.payee || '');
     setItems(currentGroup.map(it => ({
-      itemUid: it.itemUid,                      // ← key for update
+      itemUid: it.itemUid,                     
       itemName: it.itemName,
       amount: it.plannedAmount,
       gstType: 'CGST+SGST',
@@ -118,106 +118,120 @@ export default function BillEntry() {
   const transportGSTAmt = transportWOGST * (transportGSTPercent / 100);
   const grandTotal = itemsTotal + transportWOGST + transportGSTAmt + adjustment;
 
-  // const handleSubmit = async () => {
-  //   if (!billNo.trim() || !billDate || !status) {
-  //     alert('Status, Bill No. और Bill Date अनिवार्य हैं');
-  //     return;
-  //   }
-
-  //   try {
-  //     // Update EACH ITEM ROW separately (different uid = different sheet row)
-  //     const updatePromises = items.map(async (item) => {
-  //       const payload = {
-  //         uid: item.offBillUID,                      // ← send per-item uid (column C)
-  //         STATUS_4: status,
-  //         Vendor_Name_4: vendorName.trim(),
-  //         BILL_NO_4: billNo.trim(),
-  //         BILL_DATE_4: billDate,
-  //         BASIC_AMOUNT_4: Number(item.amount).toFixed(2),
-  //         CGST_4: item.cgstAmt.toFixed(2),
-  //         SGST_4: item.sgstAmt.toFixed(2),
-  //         IGST_4: item.igstAmt.toFixed(2),
-  //         TOTAL_AMOUNT_4: item.rowTotal.toFixed(2),
-  //         TRASNPORT_CHARGES_4: transportWOGST,
-  //         Transport_Gst_4: transportGSTAmt.toFixed(2),
-  //         NET_AMOUNT_4: grandTotal.toFixed(2),
-  //         Remark_4: remark.trim(),
-  //       };
-
-  //       return updateEntry(payload).unwrap();
-  //     });
-
-  //     await Promise.all(updatePromises);
-
-  //     alert(`Bill  के ${items.length} आइटम सफलतापूर्वक अपडेट हो गए`);
-  //     setSelectedBillId('');
-  //     refetch();
-  //   } catch (err) {
-  //     console.error(err);
-  //     alert('Update failed: ' + (err?.data?.message || 'Unknown error'));
-  //   }
-  // };
 
 
+//   const handleSubmit = async () => {
+//   if (!billNo.trim() || !billDate || !status) {
+//     alert('Status, Bill No. और Bill Date अनिवार्य हैं');
+//     return;
+//   }
 
-  const handleSubmit = async () => {
+//   try {
+//     // सभी items से totals calculate कर लो (backend को detailed breakdown न देना हो तो)
+//     const totalBasic = items.reduce((sum, i) => sum + Number(i.amount || 0), 0);
+//     const totalCGST  = items.reduce((sum, i) => sum + (i.cgstAmt || 0), 0);
+//     const totalSGST  = items.reduce((sum, i) => sum + (i.sgstAmt || 0), 0);
+//     const totalIGST  = items.reduce((sum, i) => sum + (i.igstAmt || 0), 0);
+//     const totalRow   = items.reduce((sum, i) => sum + (i.rowTotal || 0), 0);
+
+//     const transportGSTAmt = transportWOGST * (transportGSTPercent / 100);
+//     const netAmount = totalRow + transportWOGST + transportGSTAmt + adjustment;
+
+//     const payload = {
+//       uid: selectedBillId,               // ← यही भेजना है (OFFBILLUID)
+
+//       STATUS_4: status,
+//       Vendor_Name_4: vendorName.trim(),
+//       BILL_NO_4: billNo.trim(),
+//       BILL_DATE_4: billDate,
+
+//       // Aggregated / summarized values (अगर backend per-item नहीं चाहता)
+//       BASIC_AMOUNT_4: totalBasic.toFixed(2),
+//       CGST_4: totalCGST.toFixed(2),
+//       SGST_4: totalSGST.toFixed(2),
+//       IGST_4: totalIGST.toFixed(2),
+//       TOTAL_AMOUNT_4: totalRow.toFixed(2),
+
+//       TRASNPORT_CHARGES_4: transportWOGST.toFixed(2),
+//       Transport_Gst_4: transportGSTAmt.toFixed(2),
+//       NET_AMOUNT_4: netAmount.toFixed(2),
+
+//       Remark_4: remark.trim(),
+//     };
+
+//     // सिर्फ ONE API call
+//     await updateEntry(payload).unwrap();
+
+//     alert(`Bill ${selectedBillId} सफलतापूर्वक अपडेट हो गया (${items.length} items के साथ)`);
+    
+//     setSelectedBillId('');
+//     refetch();
+//   } catch (err) {
+//     console.error("Update error:", err);
+//     const msg = err?.data?.message || err?.message || "कुछ गलत हुआ";
+//     alert(`Update failed: ${msg}`);
+//   }
+// };
+
+
+const handleSubmit = async () => {
+  // ─── Existing Validation ───────────────────────────────
   if (!billNo.trim() || !billDate || !status) {
     alert('Status, Bill No. और Bill Date अनिवार्य हैं');
     return;
   }
 
+  // ─── NEW: Items Amount Validation ─────────────────────
+  const emptyAmountItems = items.filter(
+    (item) => !item.amount || Number(item.amount) <= 0
+  );
+
+  if (emptyAmountItems.length > 0) {
+    const uids = emptyAmountItems.map((i) => i.itemUid).join(', ');
+    alert(`इन items का Amount भरना अनिवार्य है:\n${uids}`);
+    return;
+  }
+
+  // ─── NEW: Total Amount Check ───────────────────────────
+  const totalBasic = items.reduce((sum, i) => sum + Number(i.amount || 0), 0);
+  if (totalBasic <= 0) {
+    alert('कम से कम एक item का Amount भरना अनिवार्य है');
+    return;
+  }
+
   try {
-    // सभी items से totals calculate कर लो (backend को detailed breakdown न देना हो तो)
-    const totalBasic = items.reduce((sum, i) => sum + Number(i.amount || 0), 0);
-    const totalCGST  = items.reduce((sum, i) => sum + (i.cgstAmt || 0), 0);
-    const totalSGST  = items.reduce((sum, i) => sum + (i.sgstAmt || 0), 0);
-    const totalIGST  = items.reduce((sum, i) => sum + (i.igstAmt || 0), 0);
-    const totalRow   = items.reduce((sum, i) => sum + (i.rowTotal || 0), 0);
+    const totalCGST = items.reduce((sum, i) => sum + (i.cgstAmt || 0), 0);
+    const totalSGST = items.reduce((sum, i) => sum + (i.sgstAmt || 0), 0);
+    const totalIGST = items.reduce((sum, i) => sum + (i.igstAmt || 0), 0);
+    const totalRow  = items.reduce((sum, i) => sum + (i.rowTotal || 0), 0);
 
     const transportGSTAmt = transportWOGST * (transportGSTPercent / 100);
     const netAmount = totalRow + transportWOGST + transportGSTAmt + adjustment;
 
     const payload = {
-      uid: selectedBillId,               // ← यही भेजना है (OFFBILLUID)
-
+      uid: selectedBillId,
       STATUS_4: status,
       Vendor_Name_4: vendorName.trim(),
       BILL_NO_4: billNo.trim(),
       BILL_DATE_4: billDate,
-
-      // Aggregated / summarized values (अगर backend per-item नहीं चाहता)
       BASIC_AMOUNT_4: totalBasic.toFixed(2),
       CGST_4: totalCGST.toFixed(2),
       SGST_4: totalSGST.toFixed(2),
       IGST_4: totalIGST.toFixed(2),
       TOTAL_AMOUNT_4: totalRow.toFixed(2),
-
       TRASNPORT_CHARGES_4: transportWOGST.toFixed(2),
       Transport_Gst_4: transportGSTAmt.toFixed(2),
       NET_AMOUNT_4: netAmount.toFixed(2),
-
       Remark_4: remark.trim(),
-
-      // अगर backend को items की list भी चाहिए (JSON string में) तो optional:
-      // items_json: JSON.stringify(items.map(i => ({
-      //   itemUid: i.itemUid,
-      //   amount: i.amount,
-      //   gstType: i.gstType,
-      //   gstPercent: i.gstPercent,
-      //   // etc.
-      // }))),
     };
 
-    // सिर्फ ONE API call
     await updateEntry(payload).unwrap();
-
     alert(`Bill ${selectedBillId} सफलतापूर्वक अपडेट हो गया (${items.length} items के साथ)`);
-    
     setSelectedBillId('');
     refetch();
   } catch (err) {
-    console.error("Update error:", err);
-    const msg = err?.data?.message || err?.message || "कुछ गलत हुआ";
+    console.error('Update error:', err);
+    const msg = err?.data?.message || err?.message || 'कुछ गलत हुआ';
     alert(`Update failed: ${msg}`);
   }
 };
@@ -340,7 +354,7 @@ export default function BillEntry() {
                           <td className="p-3">{item.itemUid}</td>
                           <td className="p-3">{item.itemName}</td>
                           <td className="p-3">
-                            <input
+                            {/* <input
                               type="number"
                               value={item.amount}
                               onChange={e => {
@@ -349,7 +363,24 @@ export default function BillEntry() {
                                 setItems(newItems);
                               }}
                               className="w-24 p-1.5 border rounded text-right"
-                            />
+                            /> */}
+
+// Amount input में error highlight
+<input
+  type="number"
+  value={item.amount}
+  onChange={e => {
+    const newItems = [...items];
+    newItems[i].amount = e.target.value;
+    setItems(newItems);
+  }}
+  className={`w-24 p-1.5 border rounded text-right
+    ${!item.amount || Number(item.amount) <= 0 
+      ? 'border-red-500 bg-red-50'   // ← empty हो तो red
+      : 'border-gray-300'
+    }`}
+/>
+
                           </td>
                           <td className="p-3">
                             <select
@@ -426,13 +457,29 @@ export default function BillEntry() {
                 <button onClick={() => setSelectedBillId('')} className="px-6 py-3 bg-gray-200 rounded-lg hover:bg-gray-300">
                   Cancel
                 </button>
-                <button
+                {/* <button
                   onClick={handleSubmit}
                   disabled={isSubmitting || !billNo || !billDate || !status}
                   className="px-8 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
                 >
                   {isSubmitting ? 'Saving...' : <><FileText size={18} /> Submit Bill</>}
-                </button>
+                </button> */}
+
+                <button
+  onClick={handleSubmit}
+  disabled={
+    isSubmitting ||
+    !billNo ||
+    !billDate ||
+    !status ||
+    items.some((i) => !i.amount || Number(i.amount) <= 0)  // ← NEW
+  }
+  className="px-8 py-3 bg-indigo-600 text-white rounded-lg 
+             hover:bg-indigo-700 disabled:opacity-60 
+             flex items-center gap-2"
+>
+  {isSubmitting ? 'Saving...' : <><FileText size={18} /> Submit Bill</>}
+</button>
               </div>
             </div>
           </div>

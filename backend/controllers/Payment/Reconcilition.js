@@ -1,6 +1,6 @@
 
 const express = require('express');
-const { sheets, RECONCILITION_ID } = require('../../config/googleSheet');
+const { sheets, RECONCILITION_ID } = require('../../config/googleSheet')
 const router = express.Router();
 
 router.get('/payment-Reconsilation', async (req, res) => {
@@ -80,103 +80,194 @@ router.get('/bank-balance/:bankName', async (req, res) => {
 
 
 
+// router.post('/update-reconciliation', async (req, res) => {
+//   console.log('Received body:', req.body);
+
+//   try {
+//     const {
+//       paymentDetails,
+//       bankDetails,                      // ← नया field
+//       bankClosingBalanceAfterPayment,
+//       status,
+//       remark
+//     } = req.body;
+
+//     if (!paymentDetails?.trim() || !bankDetails?.trim()) {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'Both Payment Details and Bank Details are required'
+//       });
+//     }
+
+//     const trimmedPayment = paymentDetails.trim().toLowerCase();
+//     const trimmedBank    = bankDetails.trim().toLowerCase();
+
+//     // Google Sheet से data लाओ
+//     const response = await sheets.spreadsheets.values.get({
+//       spreadsheetId : RECONCILITION_ID,
+//       range: 'Out_FMS!A7:Q',   // या जितना ज़रूरी हो
+//     });
+
+//     const rows = response.data.values || [];
+
+//     // दोनों conditions match करने वाली row ढूंढो
+//     const rowIndex = rows.findIndex(row => {
+//       const sheetPayment = (row[6] || '').toString().trim().toLowerCase();  // column G → index 6
+//       const sheetBank    = (row[4] || '').toString().trim().toLowerCase();  // column E → index 4 (Bank name वाला column)
+
+//       return sheetPayment === trimmedPayment && sheetBank === trimmedBank;
+//     });
+
+//     if (rowIndex === -1) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'No matching row found with both Payment Details and Bank Details',
+//         searchedPayment: trimmedPayment,
+//         searchedBank: trimmedBank
+//       });
+//     }
+
+//     const sheetRowNumber = 7 + rowIndex;  // A7 से शुरू है
+//     console.log(`Matched row: ${sheetRowNumber} (0-based index ${rowIndex})`);
+
+//     // अब update करो (एक-एक करके safe तरीके से)
+
+//     // Column P → Bank Closing Balance After Payment
+//     await sheets.spreadsheets.values.update({
+//       spreadsheetId : RECONCILITION_ID,
+//       range: `Out_FMS!P${sheetRowNumber}`,
+//       valueInputOption: 'RAW',
+//       resource: { values: [[bankClosingBalanceAfterPayment || '']] }
+//     });
+
+//     // Column N → Status
+//     await sheets.spreadsheets.values.update({
+//       spreadsheetId : RECONCILITION_ID,
+//       range: `Out_FMS!N${sheetRowNumber}`,
+//       valueInputOption: 'USER_ENTERED',
+//       resource: { values: [[status || '']] }
+//     });
+
+//     // Column Q → Remark
+//     await sheets.spreadsheets.values.update({
+//       spreadsheetId : RECONCILITION_ID,
+//       range: `Out_FMS!Q${sheetRowNumber}`,
+//       valueInputOption: 'USER_ENTERED',
+//       resource: { values: [[remark || '']] }
+//     });
+
+//     res.json({
+//       success: true,
+//       message: `Row ${sheetRowNumber} updated successfully`,
+//       row: sheetRowNumber,
+//       updatedFields: {
+//         P: bankClosingBalanceAfterPayment,
+//         N: status,
+//         Q: remark
+//       }
+//     });
+
+//   } catch (error) {
+//     console.error('Update error:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Update failed',
+//       error: error.message
+//     });
+//   }
+// });
+
+
+
 router.post('/update-reconciliation', async (req, res) => {
-  console.log('Received body:', req.body);
+  console.log('═══════════════════════════════════');
+  console.log('📥 FULL req.body:', JSON.stringify(req.body, null, 2));
+  console.log('📥 KEYS:', Object.keys(req.body || {}));
+  console.log('═══════════════════════════════════');
 
   try {
     const {
+      particulars,                      // ✅ MUST be here
+      paidAmount,                       // ✅ MUST be here
       paymentDetails,
-      bankDetails,                      // ← नया field
+      bankDetails,
       bankClosingBalanceAfterPayment,
       status,
-      remark
+      remark,
     } = req.body;
 
-    if (!paymentDetails?.trim() || !bankDetails?.trim()) {
+    console.log('🟢 particulars:', particulars);
+    console.log('🟢 paidAmount:', paidAmount);
+
+    if (!paymentDetails?.toString().trim() || !bankDetails?.toString().trim()) {
       return res.status(400).json({
         success: false,
-        message: 'Both Payment Details and Bank Details are required'
+        message: 'paymentDetails and bankDetails are required',
       });
     }
 
-    const trimmedPayment = paymentDetails.trim().toLowerCase();
-    const trimmedBank    = bankDetails.trim().toLowerCase();
+    // Timestamp
+    const now  = new Date();
+    const dd   = String(now.getDate()).padStart(2, '0');
+    const mm   = String(now.getMonth() + 1).padStart(2, '0');
+    const yyyy = now.getFullYear();
+    const hh   = String(now.getHours()).padStart(2, '0');
+    const min  = String(now.getMinutes()).padStart(2, '0');
+    const ss   = String(now.getSeconds()).padStart(2, '0');
+    const timeStamp = `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
 
-    // Google Sheet से data लाओ
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId : RECONCILITION_ID,
-      range: 'Out_FMS!A7:Q',   // या जितना ज़रूरी हो
+    // Next row
+    const actualOutResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId: RECONCILITION_ID,
+      range: 'Actual Out!A5:G',
     });
 
-    const rows = response.data.values || [];
+    const existingRows  = actualOutResponse.data.values || [];
+    const nextRowNumber = 5 + existingRows.length;
 
-    // दोनों conditions match करने वाली row ढूंढो
-    const rowIndex = rows.findIndex(row => {
-      const sheetPayment = (row[6] || '').toString().trim().toLowerCase();  // column G → index 6
-      const sheetBank    = (row[4] || '').toString().trim().toLowerCase();  // column E → index 4 (Bank name वाला column)
+    // Row data
+    const rowData = [
+      timeStamp,                                              // A
+      String(particulars || '').trim(),                       // B ✅ Particulars
+      String(bankDetails || '').trim(),                       // C
+      String(paymentDetails || '').trim(),                    // D
+      String(status || '').trim(),                            // E
+      String(bankClosingBalanceAfterPayment || '').trim(),    // F
+      String(paidAmount || '').trim(),                        // G ✅ Paid Amount
+    ];
 
-      return sheetPayment === trimmedPayment && sheetBank === trimmedBank;
-    });
+    console.log('📝 Row data being written:', rowData);
 
-    if (rowIndex === -1) {
-      return res.status(404).json({
-        success: false,
-        message: 'No matching row found with both Payment Details and Bank Details',
-        searchedPayment: trimmedPayment,
-        searchedBank: trimmedBank
-      });
-    }
-
-    const sheetRowNumber = 7 + rowIndex;  // A7 से शुरू है
-    console.log(`Matched row: ${sheetRowNumber} (0-based index ${rowIndex})`);
-
-    // अब update करो (एक-एक करके safe तरीके से)
-
-    // Column P → Bank Closing Balance After Payment
     await sheets.spreadsheets.values.update({
-      spreadsheetId : RECONCILITION_ID,
-      range: `Out_FMS!P${sheetRowNumber}`,
-      valueInputOption: 'RAW',
-      resource: { values: [[bankClosingBalanceAfterPayment || '']] }
-    });
-
-    // Column N → Status
-    await sheets.spreadsheets.values.update({
-      spreadsheetId : RECONCILITION_ID,
-      range: `Out_FMS!N${sheetRowNumber}`,
+      spreadsheetId: RECONCILITION_ID,
+      range: `Actual Out!A${nextRowNumber}:G${nextRowNumber}`,
       valueInputOption: 'USER_ENTERED',
-      resource: { values: [[status || '']] }
-    });
-
-    // Column Q → Remark
-    await sheets.spreadsheets.values.update({
-      spreadsheetId : RECONCILITION_ID,
-      range: `Out_FMS!Q${sheetRowNumber}`,
-      valueInputOption: 'USER_ENTERED',
-      resource: { values: [[remark || '']] }
+      resource: { values: [rowData] },
     });
 
     res.json({
       success: true,
-      message: `Row ${sheetRowNumber} updated successfully`,
-      row: sheetRowNumber,
-      updatedFields: {
-        P: bankClosingBalanceAfterPayment,
-        N: status,
-        Q: remark
-      }
+      message: `Saved at row ${nextRowNumber}`,
+      row: nextRowNumber,
+      savedData: {
+        A_TimeStamp:      timeStamp,
+        B_Particulars:    particulars,
+        C_BankDetail:     bankDetails,
+        D_PaymentDetail:  paymentDetails,
+        E_Status:         status,
+        F_ClosingBalance: bankClosingBalanceAfterPayment,
+        G_PaidAmount:     paidAmount,
+      },
     });
 
   } catch (error) {
-    console.error('Update error:', error);
+    console.error('❌ Error:', error);
     res.status(500).json({
       success: false,
-      message: 'Update failed',
-      error: error.message
+      message: 'Failed to save data',
+      error: error.message,
     });
   }
 });
-
-
 
 module.exports = router;
