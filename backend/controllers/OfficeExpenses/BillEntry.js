@@ -40,7 +40,7 @@ router.get('/Get-Expenses-Entry', async (req, res) => {
         UNIT_1: (row[8] || '').toString().trim(),
         SKU_CODE_1: (row[9] || '').toString().trim(),
         Qty_1: (row[10] || '').toString().trim(),
-        Amount: (row[24] || '').toString().trim(),
+        Amount: (row[11] || '').toString().trim(),
         DEPARTMENT_1: (row[12] || '').toString().trim(),
         APPROVAL_DOER: (row[13] || '').toString().trim(),
         RAISED_BY_1: (row[14] || '').toString().trim(),
