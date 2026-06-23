@@ -20,7 +20,7 @@ import BillEntry from "./components/OfficeExpenses/BillEntry";
 import ExpensesPayemnt from "./components/OfficeExpenses/ExpensesPayemnt";
 import OfficeForm from './components/OfficeExpenses/OfficeForm';
 import BankChargesInterestForm from "./components/Payment/BankChargesInterestForm";
-
+import AdvanceForm from "./components/OfficeExpenses/AdvanceForm";
 ////// Posseion CP
 
 import Agreement from "./components/Posseion/Agreement";
@@ -70,6 +70,7 @@ function App() {
 
           {/* ✅ Dashboard ke andar bhi rakhna ho to */}
           <Route path="OfficeForm" element={<OfficeForm />} />
+          <Route path="AdvanceForm" element={<AdvanceForm />} />
 
 
         ////////  Posseion CP Section  //////

@@ -28,7 +28,7 @@ const leadsSummary= require('./controllers/Leads/LeadsSummary')
 const officeExpenses = require('./controllers/OfficeExpenses/Approvel1')
 const BillEntry= require('./controllers/OfficeExpenses/BillEntry')
 const paymentOfficeExpenses= require('./controllers/OfficeExpenses/Payment')
-
+const AdvanceForm = require('./controllers/OfficeExpenses/AdvanceForm')
 
 /////// 
 
@@ -68,6 +68,7 @@ app.use('/api/office',officeExpenses)
 app.use('/api/office',BillEntry)
 app.use('/api/office',paymentOfficeExpenses)
 app.use('/api/office',officeForm)
+app.use('/api/office',AdvanceForm)
 
 
 app.use('/api/payment', SchedulePayment)

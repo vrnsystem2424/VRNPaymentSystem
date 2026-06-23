@@ -8,6 +8,7 @@ import { FormSlice } from './features/SchedulePayment/FormSlice';
 import { ActualBankInSlice } from './features/SchedulePayment/Actual_Bank_In_Slice';
 import { bankTransferApiSlice } from './features/SchedulePayment/bank_to_bank_transfer_slice';
 import { officeFormApi } from './features/OfficeExpense/officeFormSlice';
+import { advanceFormApi } from './features/OfficeExpense/AdvanceFormSlice';
 
 
 
@@ -50,6 +51,7 @@ export const store = configureStore({
     [ActualBankInSlice.reducerPath]: ActualBankInSlice.reducer,
     [bankTransferApiSlice.reducerPath]: bankTransferApiSlice.reducer,
     [officeFormApi.reducerPath]: officeFormApi.reducer,
+    [advanceFormApi.reducerPath]: advanceFormApi.reducer,
 
     
     [approve1Api.reducerPath]: approve1Api.reducer,
@@ -81,6 +83,7 @@ export const store = configureStore({
       .concat(ActualBankInSlice.middleware)
       .concat(bankTransferApiSlice.middleware)
       .concat(officeFormApi.middleware)
+      .concat(advanceFormApi.middleware)
 
       .concat(approve1Api.middleware)
       .concat(billEntryApi.middleware)
