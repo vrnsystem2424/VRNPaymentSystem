@@ -80,103 +80,6 @@ router.get('/bank-balance/:bankName', async (req, res) => {
 
 
 
-// router.post('/update-reconciliation', async (req, res) => {
-//   console.log('Received body:', req.body);
-
-//   try {
-//     const {
-//       paymentDetails,
-//       bankDetails,                      // ← नया field
-//       bankClosingBalanceAfterPayment,
-//       status,
-//       remark
-//     } = req.body;
-
-//     if (!paymentDetails?.trim() || !bankDetails?.trim()) {
-//       return res.status(400).json({
-//         success: false,
-//         message: 'Both Payment Details and Bank Details are required'
-//       });
-//     }
-
-//     const trimmedPayment = paymentDetails.trim().toLowerCase();
-//     const trimmedBank    = bankDetails.trim().toLowerCase();
-
-//     // Google Sheet से data लाओ
-//     const response = await sheets.spreadsheets.values.get({
-//       spreadsheetId : RECONCILITION_ID,
-//       range: 'Out_FMS!A7:Q',   // या जितना ज़रूरी हो
-//     });
-
-//     const rows = response.data.values || [];
-
-//     // दोनों conditions match करने वाली row ढूंढो
-//     const rowIndex = rows.findIndex(row => {
-//       const sheetPayment = (row[6] || '').toString().trim().toLowerCase();  // column G → index 6
-//       const sheetBank    = (row[4] || '').toString().trim().toLowerCase();  // column E → index 4 (Bank name वाला column)
-
-//       return sheetPayment === trimmedPayment && sheetBank === trimmedBank;
-//     });
-
-//     if (rowIndex === -1) {
-//       return res.status(404).json({
-//         success: false,
-//         message: 'No matching row found with both Payment Details and Bank Details',
-//         searchedPayment: trimmedPayment,
-//         searchedBank: trimmedBank
-//       });
-//     }
-
-//     const sheetRowNumber = 7 + rowIndex;  // A7 से शुरू है
-//     console.log(`Matched row: ${sheetRowNumber} (0-based index ${rowIndex})`);
-
-//     // अब update करो (एक-एक करके safe तरीके से)
-
-//     // Column P → Bank Closing Balance After Payment
-//     await sheets.spreadsheets.values.update({
-//       spreadsheetId : RECONCILITION_ID,
-//       range: `Out_FMS!P${sheetRowNumber}`,
-//       valueInputOption: 'RAW',
-//       resource: { values: [[bankClosingBalanceAfterPayment || '']] }
-//     });
-
-//     // Column N → Status
-//     await sheets.spreadsheets.values.update({
-//       spreadsheetId : RECONCILITION_ID,
-//       range: `Out_FMS!N${sheetRowNumber}`,
-//       valueInputOption: 'USER_ENTERED',
-//       resource: { values: [[status || '']] }
-//     });
-
-//     // Column Q → Remark
-//     await sheets.spreadsheets.values.update({
-//       spreadsheetId : RECONCILITION_ID,
-//       range: `Out_FMS!Q${sheetRowNumber}`,
-//       valueInputOption: 'USER_ENTERED',
-//       resource: { values: [[remark || '']] }
-//     });
-
-//     res.json({
-//       success: true,
-//       message: `Row ${sheetRowNumber} updated successfully`,
-//       row: sheetRowNumber,
-//       updatedFields: {
-//         P: bankClosingBalanceAfterPayment,
-//         N: status,
-//         Q: remark
-//       }
-//     });
-
-//   } catch (error) {
-//     console.error('Update error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Update failed',
-//       error: error.message
-//     });
-//   }
-// });
-
 
 
 router.post('/update-reconciliation', async (req, res) => {
@@ -187,18 +90,21 @@ router.post('/update-reconciliation', async (req, res) => {
 
   try {
     const {
-      particulars,                      // ✅ MUST be here
-      paidAmount,                       // ✅ MUST be here
-      paymentDetails,
-      bankDetails,
-      bankClosingBalanceAfterPayment,
-      status,
-      remark,
+      particulars,                      // B column
+      paidAmount,                       // G column
+      paymentDetails,                   // D column
+      bankDetails,                      // C column
+      bankClosingBalanceAfterPayment,   // F column
+      status,                           // E column
+      remark,                           // (optional)
+      paymentDate,                      // ✅ NEW - H column
     } = req.body;
 
     console.log('🟢 particulars:', particulars);
     console.log('🟢 paidAmount:', paidAmount);
+    console.log('🟢 paymentDate:', paymentDate);
 
+    // ── Validation ──────────────────────────────────────────────────────
     if (!paymentDetails?.toString().trim() || !bankDetails?.toString().trim()) {
       return res.status(400).json({
         success: false,
@@ -206,8 +112,8 @@ router.post('/update-reconciliation', async (req, res) => {
       });
     }
 
-    // Timestamp
-    const now  = new Date();
+    // ── Timestamp (IST) ──────────────────────────────────────────────────
+    const now = new Date();
     const dd   = String(now.getDate()).padStart(2, '0');
     const mm   = String(now.getMonth() + 1).padStart(2, '0');
     const yyyy = now.getFullYear();
@@ -216,39 +122,60 @@ router.post('/update-reconciliation', async (req, res) => {
     const ss   = String(now.getSeconds()).padStart(2, '0');
     const timeStamp = `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
 
-    // Next row
+    // ── Format Payment Date (YYYY-MM-DD → DD/MM/YYYY) for H Column ──────
+    let formattedPaymentDate = '';
+    if (paymentDate && paymentDate.toString().trim()) {
+      const rawDate = paymentDate.toString().trim();
+      if (rawDate.includes('-') && rawDate.split('-')[0].length === 4) {
+        // YYYY-MM-DD → DD/MM/YYYY
+        const [y, mo, d] = rawDate.split('-');
+        formattedPaymentDate = `${d}/${mo}/${y}`;
+      } else {
+        formattedPaymentDate = rawDate;
+      }
+    }
+
+    console.log('📅 Payment Date (H column):', formattedPaymentDate);
+
+    // ── Find Next Empty Row ──────────────────────────────────────────────
     const actualOutResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: RECONCILITION_ID,
-      range: 'Actual Out!A5:G',
+      range: 'Actual Out!A5:H',              // ✅ Range extended to H
     });
 
     const existingRows  = actualOutResponse.data.values || [];
     const nextRowNumber = 5 + existingRows.length;
 
-    // Row data
+    console.log('📍 Writing to row:', nextRowNumber);
+
+    // ── Row Data (A to H) ────────────────────────────────────────────────
     const rowData = [
-      timeStamp,                                              // A
-      String(particulars || '').trim(),                       // B ✅ Particulars
-      String(bankDetails || '').trim(),                       // C
-      String(paymentDetails || '').trim(),                    // D
-      String(status || '').trim(),                            // E
-      String(bankClosingBalanceAfterPayment || '').trim(),    // F
-      String(paidAmount || '').trim(),                        // G ✅ Paid Amount
+      timeStamp,                                              // A - Timestamp
+      String(particulars || '').trim(),                       // B - Particulars
+      String(bankDetails || '').trim(),                       // C - Bank Detail
+      String(paymentDetails || '').trim(),                    // D - Payment Detail
+      String(status || '').trim(),                            // E - Status
+      String(bankClosingBalanceAfterPayment || '').trim(),    // F - Closing Balance
+      String(paidAmount || '').trim(),                        // G - Paid Amount
+      formattedPaymentDate,                                   // H - Payment Date ✅
     ];
 
     console.log('📝 Row data being written:', rowData);
 
+    // ── Write to Sheet ───────────────────────────────────────────────────
     await sheets.spreadsheets.values.update({
       spreadsheetId: RECONCILITION_ID,
-      range: `Actual Out!A${nextRowNumber}:G${nextRowNumber}`,
+      range: `Actual Out!A${nextRowNumber}:H${nextRowNumber}`,   // ✅ A to H
       valueInputOption: 'USER_ENTERED',
       resource: { values: [rowData] },
     });
 
+    console.log('✅ Saved successfully');
+
     res.json({
       success: true,
       message: `Saved at row ${nextRowNumber}`,
-      row: nextRowNumber,
+      row:     nextRowNumber,
       savedData: {
         A_TimeStamp:      timeStamp,
         B_Particulars:    particulars,
@@ -257,6 +184,7 @@ router.post('/update-reconciliation', async (req, res) => {
         E_Status:         status,
         F_ClosingBalance: bankClosingBalanceAfterPayment,
         G_PaidAmount:     paidAmount,
+        H_PaymentDate:    formattedPaymentDate,
       },
     });
 
@@ -265,7 +193,7 @@ router.post('/update-reconciliation', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to save data',
-      error: error.message,
+      error:   error.message,
     });
   }
 });

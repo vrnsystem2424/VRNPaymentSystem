@@ -1,3 +1,7 @@
+
+
+
+
 import React, { useState, useEffect, useMemo } from "react";
 import {
   useGetPaymentReconciliationQuery,
@@ -5,7 +9,15 @@ import {
   useLazyGetBankClosingBalanceQuery,
   useUpdateReconciliationMutation,
 } from "../../features/SchedulePayment/PaymentSlice";
-import { X, Building, Search, FileText, CheckCircle, AlertCircle } from "lucide-react";
+import {
+  X,
+  Building,
+  Search,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Calendar,
+} from "lucide-react";
 import { useDispatch } from "react-redux";
 import { PaymentSlice } from "../../features/SchedulePayment/PaymentSlice";
 import Swal from 'sweetalert2';
@@ -19,56 +31,71 @@ const Reconciliation = () => {
     isLoading,
   } = useGetPaymentReconciliationQuery();
 
-  // ────────────────────────────────────────────────
-  // Your existing states & logic (unchanged)
-  // ────────────────────────────────────────────────
-  const [selectedBank, setSelectedBank] = useState("");
-  const [filteredData, setFilteredData] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
+  // ── States ─────────────────────────────────────────────────────────────
+  const [selectedBank,        setSelectedBank]        = useState("");
+  const [filteredData,        setFilteredData]        = useState([]);
+  const [searchTerm,          setSearchTerm]          = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [filterFromDate, setFilterFromDate] = useState("");
-  const [filterToDate, setFilterToDate] = useState("");
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [fromDate,            setFromDate]            = useState("");
+  const [toDate,              setToDate]              = useState("");
+  const [filterFromDate,      setFilterFromDate]      = useState("");
+  const [filterToDate,        setFilterToDate]        = useState("");
+  const [selectedItem,        setSelectedItem]        = useState(null);
+  const [isModalOpen,         setIsModalOpen]         = useState(false);
+  const [saveStatus,          setSaveStatus]          = useState('');
 
+  // ── editForm - PaymentDate added ───────────────────────────────────────
   const [editForm, setEditForm] = useState({
     BANK_CLOSING_BALANCE: "",
-    Remark: "",
-    Status: "---- Select ----- ",
+    Remark:               "",
+    Status:               "---- Select ----- ",
+    PaymentDate:          "",     // ✅ NEW - H column
   });
-  const [saveStatus, setSaveStatus] = useState('');
 
+  // ── Helpers ────────────────────────────────────────────────────────────
   const parseDate = (dateStr) => {
     if (!dateStr) return null;
     let day, month, year;
-    if (dateStr.includes('-')) [year, month, day] = dateStr.split('-');
-    else if (dateStr.includes('/')) [day, month, year] = dateStr.split('/');
+    if (dateStr.includes('-'))      [year, month, day] = dateStr.split('-');
+    else if (dateStr.includes('/')) [day, month, year]  = dateStr.split('/');
     else return null;
     const formatted = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     const date = new Date(formatted);
     return isNaN(date.getTime()) ? null : date;
   };
 
+  // DD/MM/YYYY → YYYY-MM-DD (for <input type="date">)
+  const toInputDateFormat = (dateStr) => {
+    if (!dateStr) return "";
+    if (dateStr.includes("/")) {
+      const [d, m, y] = dateStr.split("/");
+      if (d && m && y)
+        return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    }
+    return dateStr;
+  };
+
   const uniqueBanks = useMemo(() => {
     return [...new Set(reconciliationData.map(item => item.bankDetails).filter(Boolean))];
   }, [reconciliationData]);
 
-  const { 
-    data: mainBankData = {}, 
-    isLoading: isMainBankLoading 
+  // ── Bank balance queries ───────────────────────────────────────────────
+  const {
+    data: mainBankData = {},
+    isLoading: isMainBankLoading
   } = useGetBankClosingBalanceQuery(selectedBank, { skip: !selectedBank });
 
-  const { 
-    data: modalBankData = {}, 
-    isLoading: isModalBankLoading 
+  const {
+    data: modalBankData = {},
+    isLoading: isModalBankLoading
   } = useGetBankClosingBalanceQuery(selectedItem?.bankDetails, {
     skip: !selectedItem?.bankDetails || !isModalOpen,
   });
 
-  const [updateReconciliation, { isLoading: isSaving }] = useUpdateReconciliationMutation();
+  const [updateReconciliation, { isLoading: isSaving }] =
+    useUpdateReconciliationMutation();
 
+  // ── Stats ──────────────────────────────────────────────────────────────
   const bankSpecificStats = useMemo(() => {
     if (!selectedBank) return { totalPaid: 0, count: 0, finalProjected: 0 };
 
@@ -84,7 +111,6 @@ const Reconciliation = () => {
     return { totalPaid, count: bankItems.length, finalProjected };
   }, [selectedBank, reconciliationData, mainBankData]);
 
-
   const totalPendingAmount = useMemo(() => {
     return reconciliationData.reduce((sum, item) => {
       const amountStr = (item.paidAmount || "0").replace(/[₹,]/g, "").trim();
@@ -93,7 +119,7 @@ const Reconciliation = () => {
     }, 0);
   }, [reconciliationData]);
 
-  // Debounce + filtering logic remains exactly the same
+  // ── Debounce ───────────────────────────────────────────────────────────
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm.trim());
@@ -101,6 +127,7 @@ const Reconciliation = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
+  // ── Filtering ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!selectedBank) {
       setFilteredData([]);
@@ -132,33 +159,36 @@ const Reconciliation = () => {
       const term = debouncedSearchTerm.toLowerCase();
       data = data.filter(item => {
         return (
-          (item.uid?.toLowerCase().includes(term)) ||
-          (item.contractorName?.toLowerCase().includes(term)) ||
-          (item.bankDetails?.toLowerCase().includes(term)) ||
-          (item.paymentDetails?.toLowerCase().includes(term)) ||
-          (item.paymentMode?.toLowerCase().includes(term)) ||
-          (item.ExpHead?.toLowerCase().includes(term)) ||
-          (item.paymentDate?.toLowerCase().includes(term)) ||
-          (item.timestamp?.toLowerCase().includes(term)) ||
-          (item.planned2?.toLowerCase().includes(term)) ||
-          (item.paidAmount?.replace(/[₹,]/g, "").includes(term))
+          item.uid?.toLowerCase().includes(term)              ||
+          item.contractorName?.toLowerCase().includes(term)   ||
+          item.bankDetails?.toLowerCase().includes(term)      ||
+          item.paymentDetails?.toLowerCase().includes(term)   ||
+          item.paymentMode?.toLowerCase().includes(term)      ||
+          item.ExpHead?.toLowerCase().includes(term)          ||
+          item.paymentDate?.toLowerCase().includes(term)      ||
+          item.timestamp?.toLowerCase().includes(term)        ||
+          item.planned2?.toLowerCase().includes(term)         ||
+          item.paidAmount?.replace(/[₹,]/g, "").includes(term)
         );
       });
     }
     setFilteredData(data);
   }, [selectedBank, reconciliationData, debouncedSearchTerm, filterFromDate, filterToDate]);
 
+  // ── Handlers ───────────────────────────────────────────────────────────
   const handleEditClick = (item) => {
     setSelectedItem(item);
     setEditForm({
       BANK_CLOSING_BALANCE: "",
-      Remark: item.Remark || "",
-      Status: item.Status || "---- Select -----",
+      Remark:               item.Remark || "",
+      Status:               item.Status || "---- Select -----",
+      PaymentDate:          toInputDateFormat(item.paymentDate || ""), // ✅ Pre-fill
     });
     setSaveStatus('');
     setIsModalOpen(true);
   };
 
+  // ── Auto-calculate Closing Balance ─────────────────────────────────────
   useEffect(() => {
     if (isModalOpen && selectedItem && modalBankData?.bankClosingBalance) {
       const originalBalance = Number(modalBankData.bankClosingBalance.replace(/[₹,]/g, ""));
@@ -176,104 +206,59 @@ const Reconciliation = () => {
     setSaveStatus('');
     setEditForm({
       BANK_CLOSING_BALANCE: "",
-      Remark: "",
-      Status: "---- Select ----- ",
+      Remark:               "",
+      Status:               "---- Select ----- ",
+      PaymentDate:          "",
     });
   };
 
-  // const handleSaveReconciliation = async (e) => {
-  //   e.preventDefault();
-
-  //   if (editForm.Status === "---- Select -----") {
-  //     Swal.fire({
-  //       icon: "warning",
-  //       title: "Status Required",
-  //       text: "Please select a valid Status!",
-  //       confirmButtonColor: "#6366f1",
-  //     });
-  //     return;
-  //   }
-
-  //   Swal.fire({
-  //     title: "Saving Reconciliation...",
-  //     allowOutsideClick: false,
-  //     didOpen: () => Swal.showLoading(),
-  //   });
-
-  //   const payload = {
-  //     paymentDetails: selectedItem.paymentDetails.trim(),
-  //     bankDetails: selectedItem.bankDetails.trim(),
-  //     bankClosingBalanceAfterPayment: editForm.BANK_CLOSING_BALANCE.replace("₹", "").trim(),
-  //     status: editForm.Status,
-  //     remark: editForm.Remark.trim(),
-  //   };
-
-  //   try {
-  //     await updateReconciliation(payload).unwrap();
-
-  //     const bankName = selectedItem.bankDetails;
-
-  //     if (selectedBank && bankName === selectedBank) {
-  //       await triggerBankBalance(bankName, { forceRefetch: true }).unwrap();
-  //       await new Promise(resolve => setTimeout(resolve, 6000));
-  //       await triggerBankBalance(bankName, { forceRefetch: true }).unwrap();
-  //     }
-
-  //     dispatch(PaymentSlice.util.invalidateTags([{ type: 'BankBalance', id: bankName }]));
-
-  //     await Swal.fire({
-  //       icon: "success",
-  //       title: "Success!",
-  //       text: "Reconciliation saved successfully!",
-  //       confirmButtonColor: "#10b981",
-  //       timer: 2200,
-  //       showConfirmButton: false,
-  //     });
-
-  //     handleModalClose();
-  //   } catch (error) {
-  //     console.error("Save failed:", error);
-  //     let errorMessage = "Something went wrong! Please try again.";
-  //     if (error?.data?.message) errorMessage = error.data.message;
-  //     else if (error?.error) errorMessage = error.error;
-
-  //     Swal.fire({
-  //       icon: "error",
-  //       title: "Save Failed",
-  //       text: errorMessage,
-  //       confirmButtonColor: "#ef4444",
-  //     });
-  //   }
-  // };
-
-
-const handleSaveReconciliation = async (e) => {
+  // ── Save Handler ───────────────────────────────────────────────────────
+  const handleSaveReconciliation = async (e) => {
     e.preventDefault();
 
-    if (editForm.Status === "---- Select ----- ") {
+    // Status validation
+    if (editForm.Status === "---- Select ----- " || editForm.Status === "---- Select -----") {
       Swal.fire({
-        icon: "warning",
-        title: "Status Required",
-        text: "Please select a valid Status!",
+        icon:               "warning",
+        title:              "Status Required",
+        text:               "Please select a valid Status!",
+        confirmButtonColor: "#6366f1",
+      });
+      return;
+    }
+
+    // ✅ Payment Date validation
+    if (!editForm.PaymentDate?.trim()) {
+      Swal.fire({
+        icon:               "warning",
+        title:              "Date Required",
+        text:               "Please select a Payment Date!",
         confirmButtonColor: "#6366f1",
       });
       return;
     }
 
     Swal.fire({
-      title: "Saving Reconciliation...",
+      title:             "Saving Reconciliation...",
       allowOutsideClick: false,
-      didOpen: () => Swal.showLoading(),
+      didOpen:           () => Swal.showLoading(),
     });
 
+    // ── Clean values ─────────────────────────────────────────────────────
+    const cleanBalance = editForm.BANK_CLOSING_BALANCE
+      .replace(/₹/g, "")
+      .replace(/,/g, "")
+      .trim();
+
     const payload = {
-      particulars:                    String(selectedItem.contractorName || '').trim(),  // ✅ B column
-      paidAmount:                     String(selectedItem.paidAmount || '').trim(),       // ✅ G column
-      paymentDetails:                 String(selectedItem.paymentDetails || '').trim(),
-      bankDetails:                    String(selectedItem.bankDetails || '').trim(),
-      bankClosingBalanceAfterPayment: editForm.BANK_CLOSING_BALANCE.replace("₹", "").trim(),
-      status:                         editForm.Status,
+      particulars:                    String(selectedItem.contractorName || '').trim(),   // B
+      paidAmount:                     String(selectedItem.paidAmount || '').trim(),        // G
+      paymentDetails:                 String(selectedItem.paymentDetails || '').trim(),    // D
+      bankDetails:                    String(selectedItem.bankDetails || '').trim(),       // C
+      bankClosingBalanceAfterPayment: cleanBalance,                                        // F
+      status:                         editForm.Status,                                     // E
       remark:                         editForm.Remark.trim(),
+      paymentDate:                    editForm.PaymentDate.trim(),                         // H ✅
     };
 
     console.log('📤 Payload:', payload);
@@ -292,12 +277,12 @@ const handleSaveReconciliation = async (e) => {
       dispatch(PaymentSlice.util.invalidateTags([{ type: 'BankBalance', id: bankName }]));
 
       await Swal.fire({
-        icon: "success",
-        title: "Success!",
-        text: "Reconciliation saved successfully!",
+        icon:               "success",
+        title:              "Success!",
+        text:               "Reconciliation saved successfully!",
         confirmButtonColor: "#10b981",
-        timer: 2200,
-        showConfirmButton: false,
+        timer:              2200,
+        showConfirmButton:  false,
       });
 
       handleModalClose();
@@ -305,17 +290,18 @@ const handleSaveReconciliation = async (e) => {
       console.error("Save failed:", error);
       let errorMessage = "Something went wrong! Please try again.";
       if (error?.data?.message) errorMessage = error.data.message;
-      else if (error?.error) errorMessage = error.error;
+      else if (error?.error)    errorMessage = error.error;
 
       Swal.fire({
-        icon: "error",
-        title: "Save Failed",
-        text: errorMessage,
+        icon:               "error",
+        title:              "Save Failed",
+        text:               errorMessage,
         confirmButtonColor: "#ef4444",
       });
     }
   };
 
+  // ── Loading ────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
@@ -327,17 +313,18 @@ const handleSaveReconciliation = async (e) => {
     );
   }
 
+  // ── Main Render ────────────────────────────────────────────────────────
   return (
     <div
       className="min-h-screen relative overflow-hidden py-8 px-4 sm:px-6 lg:px-8 xl:px-10 w-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100"
       style={{ scrollBehavior: "smooth" }}
     >
-      {/* Animated background orbs */}
+      {/* Background orbs */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-20 -left-20 w-[500px] h-[500px] rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse-slow bg-purple-300"></div>
         <div className="absolute top-1/4 right-0 w-[600px] h-[600px] rounded-full mix-blend-multiply filter blur-3xl opacity-15 animate-pulse-slow bg-blue-300" style={{ animationDelay: "3s" }}></div>
         <div className="absolute -bottom-32 left-1/3 w-[450px] h-[450px] rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse-slow bg-indigo-300" style={{ animationDelay: "6s" }}></div>
-      </div> 
+      </div>
 
       {/* Floating particles */}
       <div className="absolute inset-0 pointer-events-none">
@@ -346,18 +333,18 @@ const handleSaveReconciliation = async (e) => {
             key={i}
             className="absolute w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-indigo-400 opacity-20"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animation: `float ${10 + Math.random() * 15}s linear infinite`,
+              left:           `${Math.random() * 100}%`,
+              top:            `${Math.random() * 100}%`,
+              animation:      `float ${10 + Math.random() * 15}s linear infinite`,
               animationDelay: `${Math.random() * 12}s`,
             }}
           />
         ))}
       </div>
 
-      {/* Main content wrapper */}
       <div className="relative z-10 space-y-8">
-        {/* Header section */}
+
+        {/* Header */}
         <div className="rounded-2xl border shadow-xl w-full p-6 sm:p-8 lg:p-10 xl:p-12 bg-white/80 backdrop-blur-sm border-indigo-200/60">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
@@ -371,12 +358,9 @@ const handleSaveReconciliation = async (e) => {
             </div>
 
             <div className="flex flex-wrap gap-4 items-center">
-              {/* Entries count */}
               <div className="px-5 py-2.5 rounded-full font-semibold text-sm shadow-md bg-emerald-100 text-emerald-800 border border-emerald-200">
                 {reconciliationData.length} Pending
               </div>
-
-              {/* Total Pending Amount */}
               <div className="px-6 py-2.5 rounded-full font-semibold text-base shadow-lg bg-amber-100 text-amber-900 border border-amber-300">
                 Total to Pay: ₹{totalPendingAmount.toLocaleString('en-IN')}
               </div>
@@ -384,7 +368,7 @@ const handleSaveReconciliation = async (e) => {
           </div>
         </div>
 
-        {/* Bank Selection */}
+        {/* Bank Selector */}
         <div className="rounded-xl border p-4 shadow-lg bg-white/70 backdrop-blur-sm border-indigo-200/60">
           <select
             value={selectedBank}
@@ -400,6 +384,7 @@ const handleSaveReconciliation = async (e) => {
 
         {selectedBank && (
           <div className="space-y-8">
+
             {/* Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="p-6 rounded-2xl border shadow-xl bg-white/80 backdrop-blur-sm border-indigo-200/60">
@@ -408,19 +393,16 @@ const handleSaveReconciliation = async (e) => {
                   {isMainBankLoading ? "..." : `₹${mainBankData?.bankClosingBalance || "0"}`}
                 </p>
               </div>
-
               <div className="p-6 rounded-2xl border shadow-xl bg-white/80 backdrop-blur-sm border-indigo-200/60">
                 <p className="text-sm uppercase tracking-wide mb-1 text-indigo-600 font-medium">Pending Entries</p>
                 <p className="text-3xl font-bold text-amber-600">{bankSpecificStats.count}</p>
               </div>
-
               <div className="p-6 rounded-2xl border shadow-xl bg-white/80 backdrop-blur-sm border-indigo-200/60">
                 <p className="text-sm uppercase tracking-wide mb-1 text-indigo-600 font-medium">Total Paid</p>
                 <p className="text-3xl font-bold text-rose-600">
                   ₹{bankSpecificStats.totalPaid.toLocaleString("en-IN")}
                 </p>
               </div>
-
               <div className="p-6 rounded-2xl border shadow-xl bg-emerald-50/80 backdrop-blur-sm border-emerald-200/60">
                 <p className="text-sm uppercase tracking-wide mb-1 text-emerald-700 font-medium">Projected Balance</p>
                 <p className="text-3xl font-bold text-emerald-700">
@@ -494,7 +476,7 @@ const handleSaveReconciliation = async (e) => {
               </div>
             </div>
 
-            {/* Table container */}
+            {/* Table */}
             <div className="rounded-2xl border overflow-hidden shadow-xl bg-white/80 backdrop-blur-sm border-indigo-200/60">
               <div className="p-6 md:p-8 lg:p-10 border-b bg-gradient-to-r from-indigo-100 to-purple-100 border-indigo-200/40">
                 <h3 className="text-2xl lg:text-3xl font-bold flex items-center gap-3 text-gray-900">
@@ -559,10 +541,14 @@ const handleSaveReconciliation = async (e) => {
           </div>
         )}
 
-        {/* Modal */}
+        {/* ══════════════════════════════════════════════════════════════ */}
+        {/* Modal - with Payment Date Field */}
+        {/* ══════════════════════════════════════════════════════════════ */}
         {isModalOpen && selectedItem && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="rounded-2xl shadow-2xl w-full max-w-2xl border overflow-hidden bg-white border-indigo-200">
+
+              {/* Modal Header */}
               <div className="p-6 border-b flex justify-between items-center bg-gradient-to-r from-indigo-500 to-purple-500 border-indigo-200">
                 <h3 className="text-2xl font-bold text-white">Reconcile Transaction</h3>
                 <button onClick={handleModalClose} className="text-white/80 hover:text-white transition">
@@ -570,8 +556,9 @@ const handleSaveReconciliation = async (e) => {
                 </button>
               </div>
 
-              <div className="p-6 space-y-6">
-                {/* Status messages */}
+              {/* Modal Body */}
+              <div className="p-6 space-y-6 max-h-[85vh] overflow-y-auto">
+
                 {saveStatus === "success" && (
                   <div className="flex items-center gap-3 p-4 rounded-xl border bg-emerald-100 border-emerald-200 text-emerald-800">
                     <CheckCircle className="w-6 h-6" />
@@ -585,6 +572,7 @@ const handleSaveReconciliation = async (e) => {
                   </div>
                 )}
 
+                {/* Info Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                   <div className="p-5 rounded-xl border bg-gray-50 border-gray-200">
                     <p className="text-sm uppercase mb-1 text-gray-500 font-medium">Bank</p>
@@ -602,6 +590,7 @@ const handleSaveReconciliation = async (e) => {
                   </div>
                 </div>
 
+                {/* Auto Closing Balance */}
                 <div>
                   <label className="block text-sm font-medium mb-2 text-gray-700">
                     Auto-calculated Closing Balance
@@ -614,6 +603,33 @@ const handleSaveReconciliation = async (e) => {
                   />
                 </div>
 
+                {/* ✅ NEW - Payment Date (H Column) */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium mb-2 text-gray-700">
+                    <Calendar className="w-4 h-4 text-indigo-600" />
+                    Payment Date <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={editForm.PaymentDate}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, PaymentDate: e.target.value })
+                    }
+                    className={`w-full px-5 py-4 rounded-xl border-2 focus:outline-none focus:ring-2 transition-all bg-white text-gray-900 focus:ring-indigo-400 focus:border-indigo-400 ${
+                      !editForm.PaymentDate ? "border-rose-300" : "border-emerald-400"
+                    }`}
+                  />
+                  {selectedItem?.paymentDate && (
+                    <p className="text-xs mt-1.5 text-gray-500">
+                      Original payment date:{" "}
+                      <span className="font-medium text-indigo-600">
+                        {selectedItem.paymentDate}
+                      </span>
+                    </p>
+                  )}
+                </div>
+
+                {/* Remark + Status */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium mb-2 text-gray-700">Remark</label>
@@ -627,7 +643,9 @@ const handleSaveReconciliation = async (e) => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-gray-700">Reconciliation Status</label>
+                    <label className="block text-sm font-medium mb-2 text-gray-700">
+                      Reconciliation Status <span className="text-rose-500">*</span>
+                    </label>
                     <select
                       value={editForm.Status}
                       onChange={(e) => setEditForm({ ...editForm, Status: e.target.value })}
@@ -640,6 +658,7 @@ const handleSaveReconciliation = async (e) => {
                   </div>
                 </div>
 
+                {/* Action Buttons */}
                 <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
                   <button
                     onClick={handleModalClose}
@@ -677,19 +696,8 @@ const handleSaveReconciliation = async (e) => {
           </div>
         )}
       </div>
-
-      {/* Global styles */}
-      
     </div>
   );
 };
 
 export default Reconciliation;
-
-
-
-
-
-
-/////////////////////////
-

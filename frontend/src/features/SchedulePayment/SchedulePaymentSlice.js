@@ -9,9 +9,6 @@ export const schedulePaymentApi = createApi({
   baseQuery: fetchBaseQuery({
     baseUrl: BASE_URL,
     prepareHeaders: (headers) => {
-      // If you need auth token later, add here
-      // const token = localStorage.getItem('token');
-      // if (token) headers.set('Authorization', `Bearer ${token}`);
       return headers;
     },
   }),

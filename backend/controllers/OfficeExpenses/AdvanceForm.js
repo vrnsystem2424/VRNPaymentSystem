@@ -77,7 +77,10 @@ router.get('/Get-Advance-Dropdown', async (req, res) => {
   }
 });
 
+
 // ─── POST Route - Add new advance payment entry ──────────────
+
+
 router.post('/Post-Advance-Payment', async (req, res) => {
   try {
     const {
@@ -107,6 +110,7 @@ router.post('/Post-Advance-Payment', async (req, res) => {
     const timestamp = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
     // Row data (A to H)
+    
     const rowData = [
       timestamp,                              // A - Timestamp
       String(Project_Name).trim(),           // B - Project_Name
@@ -118,9 +122,11 @@ router.post('/Post-Advance-Payment', async (req, res) => {
       String(PAYMENT_DATE || '').trim(),     // H - PAYMENT_DATE
     ];
 
+
+
     const response = await sheets.spreadsheets.values.append({
       spreadsheetId: OfficeExpenseID,
-      range: 'Advance_Payment!A:H',
+      range: 'Payment_Sheet!A:H',
       valueInputOption: 'USER_ENTERED',
       insertDataOption: 'INSERT_ROWS',
       resource: { values: [rowData] },

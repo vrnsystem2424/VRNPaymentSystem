@@ -1,4 +1,5 @@
 
+
 // import React, { useState, useMemo, useEffect } from 'react';
 // import {
 //   Calendar, Search, AlertCircle,
@@ -13,6 +14,9 @@
 //   useUpdateSchedulePaymentMutation,
 //   useGetProjectBankMappingQuery
 // } from '../../features/SchedulePayment/SchedulePaymentSlice';
+
+// // ✅ NEW IMPORT - Ledger Page
+// import LedgerPage from './LedgerPage';
 
 // /* ─── Helper Components ─── */
 // const StatPill = ({ label, value, color }) => {
@@ -79,6 +83,9 @@
 //     lastDateOfReceiving: '', bankName: '', paymentMode: '', paymentDetails: '',
 //     gstPercent: '0', tdsAmount: '0'
 //   });
+
+//   // ✅ NEW STATE - Ledger Page toggle
+//   const [showLedgerPage, setShowLedgerPage] = useState(false);
 
 //   const { data: payments = [], isLoading, isFetching, isError, error } = useGetSchedulePaymentsQuery();
 //   const [updateSchedulePayment, { isLoading: isUpdating }] = useUpdateSchedulePaymentMutation();
@@ -338,16 +345,29 @@
 //     return Math.max(0, agrValue - netReceived);
 //   };
 
+//   const isScheduleOverdueCheck = (sch, isComplete) => {
+//     if (isComplete) return false;
+//     const plannedDate = sch.Planned;
+//     const nextDate = getScheduleNextDate(sch);
+//     const hasPlanned = !!plannedDate && plannedDate !== '—' && plannedDate !== '-';
+//     const hasNextDate = !!nextDate;
+//     const plannedOverdue = hasPlanned ? isOverdue(plannedDate) : false;
+//     const nextDateOverdue = hasNextDate ? isOverdue(nextDate) : false;
+//     if (hasPlanned && hasNextDate) return plannedOverdue && nextDateOverdue;
+//     if (hasNextDate) return nextDateOverdue;
+//     if (hasPlanned) return plannedOverdue;
+//     return false;
+//   };
+
 //   const getBookingOverdueDue = (booking) => {
-//     const today = new Date(); today.setHours(0, 0, 0, 0);
 //     const balanceMap = getScheduleBalancesWithSpillover(booking);
 //     return booking.schedules.reduce((sum, sch) => {
-//       const plannedDate = parseToDate(sch.Planned);
 //       const key = getScheduleKey(sch);
 //       const info = balanceMap.get(key);
 //       const balance = info ? info.balance : getScheduleBalance(sch);
-//       if (plannedDate && plannedDate < today && balance > 0) return sum + balance;
-//       return sum;
+//       if (balance <= 0) return sum;
+//       const isComplete = info ? info.isComplete : false;
+//       return isScheduleOverdueCheck(sch, isComplete) ? sum + balance : sum;
 //     }, 0);
 //   };
 
@@ -380,13 +400,74 @@
 //     return 'partial';
 //   };
 
+//   const getScheduleNextDate = (sch) => {
+//     if (sch.previousPayments?.length > 0) {
+//       const sorted = [...sch.previousPayments].sort((a, b) => {
+//         const dA = parseToDate(a.previousReceviedAmountDate)?.getTime() || new Date(a.timestamp || 0).getTime();
+//         const dB = parseToDate(b.previousReceviedAmountDate)?.getTime() || new Date(b.timestamp || 0).getTime();
+//         return dB - dA;
+//       });
+//       for (const pay of sorted) {
+//         for (const field of ['NextDate', 'nextDate', 'next_date', 'nextFollowupDate']) {
+//           if (pay[field] && pay[field] !== '—' && pay[field] !== '-' && pay[field] !== '') {
+//             const fd = formatDate(pay[field], true);
+//             if (fd && fd !== '—') return fd;
+//           }
+//         }
+//       }
+//     }
+//     if (sch.followUpHistory?.length > 0) {
+//       const sorted = [...sch.followUpHistory].sort((a, b) => new Date(b.timestamp || b.dateOfFollowup || 0) - new Date(a.timestamp || a.dateOfFollowup || 0));
+//       for (const fu of sorted) {
+//         if (fu.nextDateOfFollowup && fu.nextDateOfFollowup !== '—' && fu.nextDateOfFollowup !== '-' && fu.nextDateOfFollowup !== '') {
+//           const fd = formatDate(fu.nextDateOfFollowup, true);
+//           if (fd && fd !== '—') return fd;
+//         }
+//       }
+//     }
+//     for (const field of ['NextDate', 'nextDate', 'nextDateOfFollowup', 'next_date', 'nextFollowupDate']) {
+//       if (sch[field] && sch[field] !== '—' && sch[field] !== '-' && sch[field] !== '' && sch[field].toUpperCase() !== 'Y' && sch[field].toUpperCase() !== 'N') {
+//         const fd = formatDate(sch[field], true);
+//         if (fd && fd !== '—') return fd;
+//       }
+//     }
+//     return null;
+//   };
+
 //   const isBookingOverdue = (booking) => {
 //     if (getBookingStatus(booking) === 'completed') return false;
-//     const earliestPlanned = getEarliestPendingPlanned(booking);
-//     const plannedOverdue = earliestPlanned ? isOverdue(earliestPlanned) : false;
-//     const fuData = getNextFollowUpForBooking(booking);
-//     const nextFuOverdue = fuData.nextDate && fuData.nextDate !== '—' ? isOverdue(fuData.nextDate) : false;
-//     return plannedOverdue || nextFuOverdue;
+
+//     const balanceMap = getScheduleBalancesWithSpillover(booking);
+
+//     for (const sch of booking.schedules) {
+//       const key = getScheduleKey(sch);
+//       const info = balanceMap.get(key);
+//       const isPending = info ? !info.isComplete : getScheduleBalance(sch) > 0;
+//       if (!isPending) continue;
+
+//       const plannedDate = sch.Planned;
+//       const nextDate = getScheduleNextDate(sch);
+
+//       const hasPlanned = !!plannedDate && plannedDate !== '—' && plannedDate !== '-';
+//       const hasNextDate = !!nextDate;
+
+//       const plannedOverdue = hasPlanned ? isOverdue(plannedDate) : false;
+//       const nextDateOverdue = hasNextDate ? isOverdue(nextDate) : false;
+
+//       let scheduleIsOverdue = false;
+
+//       if (hasPlanned && hasNextDate) {
+//         scheduleIsOverdue = plannedOverdue && nextDateOverdue;
+//       } else if (hasNextDate) {
+//         scheduleIsOverdue = nextDateOverdue;
+//       } else if (hasPlanned) {
+//         scheduleIsOverdue = plannedOverdue;
+//       }
+
+//       if (scheduleIsOverdue) return true;
+//     }
+
+//     return false;
 //   };
 
 //   const groupedBookings = useMemo(() => {
@@ -597,6 +678,11 @@
 //     </div>
 //   );
 
+//   // ✅ NEW - If ledger page is open, show it instead
+//   if (showLedgerPage) {
+//     return <LedgerPage onBack={() => setShowLedgerPage(false)} />;
+//   }
+
 //   return (
 //     <div className="min-h-screen bg-slate-50">
 //       {/* Header */}
@@ -610,11 +696,22 @@
 //             </h1>
 //             <p className="text-slate-400 text-xs mt-0.5">{isCRM ? 'View and manage pending payment follow-ups' : 'Track and manage all unit payment schedules'}</p>
 //           </div>
-//           <div className="flex gap-2 flex-wrap">
+
+//           {/* ✅ MODIFIED - Added Ledger Button */}
+//           <div className="flex gap-2 flex-wrap items-center">
 //             <StatPill label="Total" value={stats.total} color="blue" />
 //             <StatPill label="Completed" value={stats.completed} color="green" />
 //             <StatPill label="Partial" value={stats.partial} color="amber" />
 //             <StatPill label="Pending" value={stats.pending} color="red" />
+
+//             {/* ✅ NEW LEDGER BUTTON */}
+//             <button
+//               onClick={() => setShowLedgerPage(true)}
+//               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold rounded-xl text-xs transition shadow-md"
+//               title="Generate Payment Ledger PDF"
+//             >
+//               <FileText size={14} /> Generate Ledger
+//             </button>
 //           </div>
 //         </div>
 //       </div>
@@ -708,7 +805,7 @@
 //                   const earliestPlanned = getEarliestPendingPlanned(booking);
 //                   const plannedOverdue = earliestPlanned ? isOverdue(earliestPlanned) : false;
 //                   const nextFuOverdue = fuInfo.nextDate && fuInfo.nextDate !== '—' ? isOverdue(fuInfo.nextDate) : false;
-//                   const isHighlighted = status !== 'completed' && (plannedOverdue || nextFuOverdue);
+//                   const isHighlighted = status !== 'completed' && isBookingOverdue(booking);
 //                   const totalReceived = getBookingTotalReceived(booking);
 //                   const totalSurplus = getBookingTotalSurplus(booking);
 //                   const balanceDue = getBookingBalanceDue(booking);
@@ -857,17 +954,17 @@
 //               const hasRefund = totalRefund > 0;
 //               const hasSurplus = totalSurplus > 0;
 
-// const localBalanceMap = getScheduleBalancesWithSpillover(selectedBooking);
-// const totalScheduleAmount = selectedBooking.schedules.reduce((sum, sch) => {
-//   const key = getScheduleKey(sch);
-//   const info = localBalanceMap.get(key);
-//   const balance = info ? info.balance : getScheduleBalance(sch);
-//   const plannedDate = parseToDate(sch.Planned);
-//   const today = new Date();
-//   today.setHours(0, 0, 0, 0);
-//   const isOverdueSchedule = plannedDate && plannedDate < today && balance > 0;
-//   return isOverdueSchedule ? sum + stripNum(sch.Amount) : sum;
-// }, 0);
+//               const localBalanceMap = getScheduleBalancesWithSpillover(selectedBooking);
+//               const totalScheduleAmount = selectedBooking.schedules.reduce((sum, sch) => {
+//                 const key = getScheduleKey(sch);
+//                 const info = localBalanceMap.get(key);
+//                 const balance = info ? info.balance : getScheduleBalance(sch);
+//                 const plannedDate = parseToDate(sch.Planned);
+//                 const today = new Date();
+//                 today.setHours(0, 0, 0, 0);
+//                 const isOverdueSchedule = plannedDate && plannedDate < today && balance > 0;
+//                 return isOverdueSchedule ? sum + stripNum(sch.Amount) : sum;
+//               }, 0);
 
 //               return (
 //                 <div className="mx-5 mb-0 mt-4 rounded-xl border border-slate-200 overflow-hidden shadow-sm">
@@ -878,27 +975,20 @@
 //                   </div>
 //                   <div className="overflow-x-auto">
 //                     <div className="flex divide-x divide-slate-100 bg-white w-full min-w-max">
-
-//                       {/* Agreement Value */}
 //                       <div className="px-4 py-3 flex-1 min-w-[130px]">
 //                         <p className="text-xs text-slate-400 font-medium uppercase tracking-wide mb-1">Agreement Value</p>
 //                         <p className="font-bold text-slate-800 text-sm">{formatCurrencyShort(originalAgrValue)}</p>
 //                       </div>
-
-//                       {/* ✅ NEW: Total Schedule Amount Box */}
 //                       <div className="px-4 py-3 bg-violet-50 flex-1 min-w-[150px]">
 //                         <p className="text-xs text-violet-600 font-medium uppercase tracking-wide mb-1">Pending Schedule Amount</p>
 //                         <p className="font-black text-violet-700 text-base">{formatCurrencyShort(totalScheduleAmount)}</p>
 //                         <p className="text-[10px] text-violet-500 mt-0.5">Sum of all schedules</p>
 //                       </div>
-
-//                       {/* Total Received */}
 //                       <div className="px-4 py-3 bg-emerald-50 flex-1 min-w-[140px]">
 //                         <p className="text-xs text-emerald-600 font-medium uppercase tracking-wide mb-1">Total Received</p>
 //                         <p className="font-black text-emerald-700 text-base">{formatCurrencyShort(totalReceived)}</p>
 //                         <p className="text-[10px] text-emerald-500 mt-0.5">Gross amount across schedules</p>
 //                       </div>
-
 //                       {hasRefund && (
 //                         <div className="px-4 py-3 bg-orange-50 flex-1 min-w-[140px]">
 //                           <p className="text-xs text-orange-600 font-medium uppercase tracking-wide mb-1 flex items-center gap-1"><ArrowDownLeft size={11} /> Total Refunded</p>
@@ -906,13 +996,11 @@
 //                           <p className="text-[10px] text-orange-400 mt-0.5">Deducted from received</p>
 //                         </div>
 //                       )}
-
 //                       <div className="px-4 py-3 bg-green-50 flex-1 min-w-[140px]">
 //                         <p className="text-xs text-green-600 font-medium uppercase tracking-wide mb-1">Net Received</p>
 //                         <p className="font-black text-green-700 text-base">{formatCurrencyShort(netReceived)}</p>
 //                         <p className="text-[10px] text-green-500 mt-0.5">Received - Refund</p>
 //                       </div>
-
 //                       {hasSurplus && (
 //                         <div className="px-4 py-3 bg-teal-50 flex-1 min-w-[130px]">
 //                           <p className="text-xs text-teal-600 font-medium uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingUp size={11} /> Total Surplus</p>
@@ -920,19 +1008,16 @@
 //                           <p className="text-[10px] text-teal-500 mt-0.5">Above agreement value</p>
 //                         </div>
 //                       )}
-
 //                       <div className="px-4 py-3 bg-red-50 flex-1 min-w-[130px]">
 //                         <p className="text-xs text-red-500 font-medium uppercase tracking-wide mb-1">Overdue Due</p>
 //                         <p className="font-black text-red-700 text-base">{formatCurrencyShort(overdueDue)}</p>
 //                         <p className="text-[10px] text-red-400 mt-0.5">Past planned dates</p>
 //                       </div>
-
 //                       <div className="px-4 py-3 bg-amber-50 flex-1 min-w-[140px]">
 //                         <p className="text-xs text-amber-600 font-medium uppercase tracking-wide mb-1">Balance Due</p>
 //                         <p className="font-black text-amber-700 text-base">{formatCurrencyShort(balanceDue)}</p>
 //                         <p className="text-[10px] text-amber-500 mt-0.5">Agreement - Net Received</p>
 //                       </div>
-
 //                     </div>
 //                   </div>
 //                   <div className="h-2 bg-slate-100">
@@ -959,7 +1044,7 @@
 //                   const balance = spilloverInfo ? spilloverInfo.balance : getScheduleBalance(sch);
 //                   const isComplete = spilloverInfo ? spilloverInfo.isComplete : balance <= 0;
 //                   const spilloverSurplus = spilloverInfo?.surplus || 0;
-//                   const isScheduleOverdue = isOverdue(sch.Planned) && !isComplete;
+//                   const isScheduleOverdue = isScheduleOverdueCheck(sch, isComplete);
 //                   const hasPrev = sch.previousPayments?.length > 0;
 //                   const hasFU = sch.followUpHistory?.length > 0;
 //                   const sortedFU = hasFU ? [...sch.followUpHistory].sort((a, b) => new Date(b.timestamp || b.dateOfFollowup || 0) - new Date(a.timestamp || a.dateOfFollowup || 0)) : [];
@@ -1357,8 +1442,6 @@
 
 
 
-//////////////////
-
 
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -1367,7 +1450,7 @@ import {
   Edit3, X, Loader2, MessageSquare,
   Filter, ChevronLeft, ChevronRight, Eye,
   Clock, CheckCircle2, AlertTriangle, IndianRupee, Phone, Mail, MapPin,
-  Percent, TrendingUp, DollarSign, ArrowDownLeft, FileText
+  Percent, TrendingUp, DollarSign, ArrowDownLeft, FileText, XCircle
 } from 'lucide-react';
 
 import {
@@ -1375,6 +1458,8 @@ import {
   useUpdateSchedulePaymentMutation,
   useGetProjectBankMappingQuery
 } from '../../features/SchedulePayment/SchedulePaymentSlice';
+
+import LedgerPage from './LedgerPage';
 
 /* ─── Helper Components ─── */
 const StatPill = ({ label, value, color }) => {
@@ -1442,6 +1527,8 @@ const SchedulePayment = () => {
     gstPercent: '0', tdsAmount: '0'
   });
 
+  const [showLedgerPage, setShowLedgerPage] = useState(false);
+
   const { data: payments = [], isLoading, isFetching, isError, error } = useGetSchedulePaymentsQuery();
   const [updateSchedulePayment, { isLoading: isUpdating }] = useUpdateSchedulePaymentMutation();
   const { data: bankMapping, isLoading: banksLoading } = useGetProjectBankMappingQuery(undefined, { refetchOnMountOrArgChange: true });
@@ -1451,6 +1538,7 @@ const SchedulePayment = () => {
 
   const isRefundStatus = (s) => s === 'refund';
   const isWorkNotDoneStatus = (s) => s === 'worknotdone';
+  const isCancelledStatus = (s) => s === 'cancelled';   // ✅ NEW
   const isPaymentStatus = (s) => ['Done', 'partial', 'refund', 'worknotdone'].includes(s);
 
   const gstCalculation = useMemo(() => {
@@ -1700,7 +1788,6 @@ const SchedulePayment = () => {
     return Math.max(0, agrValue - netReceived);
   };
 
-  // Schedule-level overdue check — next date aware (same logic as isBookingOverdue)
   const isScheduleOverdueCheck = (sch, isComplete) => {
     if (isComplete) return false;
     const plannedDate = sch.Planned;
@@ -1756,19 +1843,7 @@ const SchedulePayment = () => {
     return 'partial';
   };
 
-  /**
-   * OVERDUE LOGIC (per-schedule level check):
-   *
-   * Har pending schedule ke liye independently check karo:
-   *   - Agar us schedule ki next follow-up date hai (kisi bhi source se) →
-   *       sirf next date check karo (past = overdue)
-   *   - Agar next date nahi hai → planned date check karo (past = overdue)
-   *   - Dono hain → dono past hone chahiye (AND)
-   *
-   * Booking overdue = koi bhi ek pending schedule overdue ho
-   */
   const getScheduleNextDate = (sch) => {
-    // previousPayments se next date dhundo
     if (sch.previousPayments?.length > 0) {
       const sorted = [...sch.previousPayments].sort((a, b) => {
         const dA = parseToDate(a.previousReceviedAmountDate)?.getTime() || new Date(a.timestamp || 0).getTime();
@@ -1784,7 +1859,6 @@ const SchedulePayment = () => {
         }
       }
     }
-    // followUpHistory se next date dhundo
     if (sch.followUpHistory?.length > 0) {
       const sorted = [...sch.followUpHistory].sort((a, b) => new Date(b.timestamp || b.dateOfFollowup || 0) - new Date(a.timestamp || a.dateOfFollowup || 0));
       for (const fu of sorted) {
@@ -1794,7 +1868,6 @@ const SchedulePayment = () => {
         }
       }
     }
-    // schedule fields se dhundo
     for (const field of ['NextDate', 'nextDate', 'nextDateOfFollowup', 'next_date', 'nextFollowupDate']) {
       if (sch[field] && sch[field] !== '—' && sch[field] !== '-' && sch[field] !== '' && sch[field].toUpperCase() !== 'Y' && sch[field].toUpperCase() !== 'N') {
         const fd = formatDate(sch[field], true);
@@ -1809,7 +1882,6 @@ const SchedulePayment = () => {
 
     const balanceMap = getScheduleBalancesWithSpillover(booking);
 
-    // Har pending schedule ko individually check karo
     for (const sch of booking.schedules) {
       const key = getScheduleKey(sch);
       const info = balanceMap.get(key);
@@ -1828,17 +1900,14 @@ const SchedulePayment = () => {
       let scheduleIsOverdue = false;
 
       if (hasPlanned && hasNextDate) {
-        // Dono hain → dono past hone chahiye
         scheduleIsOverdue = plannedOverdue && nextDateOverdue;
       } else if (hasNextDate) {
-        // Sirf next date hai → next date check karo
         scheduleIsOverdue = nextDateOverdue;
       } else if (hasPlanned) {
-        // Sirf planned date hai → planned check karo
         scheduleIsOverdue = plannedOverdue;
       }
 
-      if (scheduleIsOverdue) return true; // ek bhi schedule overdue = booking overdue
+      if (scheduleIsOverdue) return true;
     }
 
     return false;
@@ -1966,21 +2035,38 @@ const SchedulePayment = () => {
 
     const paymentStatuses = ['Done', 'partial', 'refund', 'worknotdone'];
     const isPayment = paymentStatuses.includes(actionForm.status);
+    const isCancelled = isCancelledStatus(actionForm.status);   // ✅ NEW
 
-    if (isPayment && (!actionForm.amountReceived || Number(actionForm.amountReceived) <= 0)) {
-      alert("Amount daalna zaroori hai aur 0 se zyada hona chahiye"); return;
+    // ✅ NEW - Cancel confirmation
+    if (isCancelled) {
+      const confirmed = window.confirm(
+        "⚠️ Are you sure you want to CANCEL this payment?\n\nThis will HIDE the row from active dashboard permanently."
+      );
+      if (!confirmed) return;
+
+      if (!actionForm.remark?.trim()) {
+        alert("Cancellation ka reason likhna zaroori hai (Remark field)");
+        return;
+      }
     }
-    if (isPayment && !actionForm.lastDateOfReceiving?.trim()) {
-      alert("Date bharein — yeh zaroori hai"); return;
-    }
-    if (isPayment && (!actionForm.bankName?.trim() || !actionForm.paymentMode?.trim())) {
-      alert("Bank Name aur Payment Mode dono bharein"); return;
-    }
-    if (actionForm.status === 'pending' && (!actionForm.nextDate || !actionForm.remark?.trim())) {
-      alert("Pending ke liye Next Date aur Remark dono bharein"); return;
-    }
-    if (isRefundStatus(actionForm.status) && !actionForm.remark?.trim()) {
-      alert("Refund ka reason likhna zaroori hai"); return;
+
+    // Skip other validations if cancelled
+    if (!isCancelled) {
+      if (isPayment && (!actionForm.amountReceived || Number(actionForm.amountReceived) <= 0)) {
+        alert("Amount daalna zaroori hai aur 0 se zyada hona chahiye"); return;
+      }
+      if (isPayment && !actionForm.lastDateOfReceiving?.trim()) {
+        alert("Date bharein — yeh zaroori hai"); return;
+      }
+      if (isPayment && (!actionForm.bankName?.trim() || !actionForm.paymentMode?.trim())) {
+        alert("Bank Name aur Payment Mode dono bharein"); return;
+      }
+      if (actionForm.status === 'pending' && (!actionForm.nextDate || !actionForm.remark?.trim())) {
+        alert("Pending ke liye Next Date aur Remark dono bharein"); return;
+      }
+      if (isRefundStatus(actionForm.status) && !actionForm.remark?.trim()) {
+        alert("Refund ka reason likhna zaroori hai"); return;
+      }
     }
 
     try {
@@ -2023,6 +2109,7 @@ const SchedulePayment = () => {
       let successMsg = "Successfully updated!";
       if (isRefundStatus(actionForm.status)) successMsg = "Refund successfully recorded!";
       if (isWorkNotDoneStatus(actionForm.status)) successMsg = "Work Not Done recorded successfully!";
+      if (isCancelled) successMsg = "✕ Payment cancelled successfully! Row hidden from dashboard.";
 
       alert(successMsg);
       closeActionModal();
@@ -2052,6 +2139,10 @@ const SchedulePayment = () => {
     </div>
   );
 
+  if (showLedgerPage) {
+    return <LedgerPage onBack={() => setShowLedgerPage(false)} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -2065,11 +2156,20 @@ const SchedulePayment = () => {
             </h1>
             <p className="text-slate-400 text-xs mt-0.5">{isCRM ? 'View and manage pending payment follow-ups' : 'Track and manage all unit payment schedules'}</p>
           </div>
-          <div className="flex gap-2 flex-wrap">
+
+          <div className="flex gap-2 flex-wrap items-center">
             <StatPill label="Total" value={stats.total} color="blue" />
             <StatPill label="Completed" value={stats.completed} color="green" />
             <StatPill label="Partial" value={stats.partial} color="amber" />
             <StatPill label="Pending" value={stats.pending} color="red" />
+
+            <button
+              onClick={() => setShowLedgerPage(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold rounded-xl text-xs transition shadow-md"
+              title="Generate Payment Ledger PDF"
+            >
+              <FileText size={14} /> Generate Ledger
+            </button>
           </div>
         </div>
       </div>
@@ -2163,7 +2263,6 @@ const SchedulePayment = () => {
                   const earliestPlanned = getEarliestPendingPlanned(booking);
                   const plannedOverdue = earliestPlanned ? isOverdue(earliestPlanned) : false;
                   const nextFuOverdue = fuInfo.nextDate && fuInfo.nextDate !== '—' ? isOverdue(fuInfo.nextDate) : false;
-                  // Row highlight uses same smart logic as isBookingOverdue
                   const isHighlighted = status !== 'completed' && isBookingOverdue(booking);
                   const totalReceived = getBookingTotalReceived(booking);
                   const totalSurplus = getBookingTotalSurplus(booking);
@@ -2603,9 +2702,11 @@ const SchedulePayment = () => {
       {showActionModal && selectedPayment && (
         <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="bg-slate-900 p-5 rounded-t-2xl text-white flex items-center justify-between">
+            <div className={`p-5 rounded-t-2xl text-white flex items-center justify-between ${isCancelledStatus(actionForm.status) ? 'bg-red-800' : 'bg-slate-900'}`}>
               <div>
-                <h2 className="text-lg font-bold flex items-center gap-2"><Edit3 size={18} /> Take Action
+                <h2 className="text-lg font-bold flex items-center gap-2">
+                  {isCancelledStatus(actionForm.status) ? <XCircle size={18} /> : <Edit3 size={18} />}
+                  {isCancelledStatus(actionForm.status) ? 'Cancel Payment' : 'Take Action'}
                   {isCRM && <span className="ml-2 px-2 py-0.5 bg-orange-500 text-white text-xs font-semibold rounded-full">CRM</span>}
                 </h2>
                 <p className="text-xs text-slate-300 mt-0.5">{selectedPayment.applicantName} • {selectedPayment.unitNo} • {selectedPayment.bookingId}</p>
@@ -2676,6 +2777,7 @@ const SchedulePayment = () => {
                     {!isCRM && <option value="partial">◑ Partial Payment</option>}
                     {!isCRM && <option value="refund">↩ Refund Payment</option>}
                     {!isCRM && <option value="worknotdone">📝 Work Not Done</option>}
+                    {!isCRM && <option value="cancelled">✕ Cancel Payment</option>}
                     <option value="pending">⏳ Pending</option>
                   </select>
                 </FormField>
@@ -2764,6 +2866,45 @@ const SchedulePayment = () => {
                   </>
                 )}
 
+                {/* ✅ NEW - CANCELLED FIELDS */}
+                {!isCRM && isCancelledStatus(actionForm.status) && (
+                  <>
+                    <FormField label="Cancellation Date" required>
+                      <input
+                        type="date"
+                        name="lastDateOfReceiving"
+                        value={actionForm.lastDateOfReceiving}
+                        onChange={handleFormChange}
+                        disabled={isUpdating}
+                        className="w-full px-4 py-2.5 border-2 rounded-lg focus:outline-none text-sm border-red-200 focus:border-red-400 bg-red-50"
+                      />
+                    </FormField>
+
+                    <div className="md:col-span-2 bg-red-50 border-2 border-red-200 rounded-lg p-3 flex items-start gap-2">
+                      <AlertTriangle size={18} className="text-red-600 mt-0.5 flex-shrink-0" />
+                      <div className="text-sm text-red-800">
+                        <p className="font-bold">⚠️ Payment Cancellation Warning</p>
+                        <p className="text-xs mt-1">
+                          This will mark the payment as <strong>CANCELLED</strong> in the sheet (V column).
+                          It will be <strong>hidden from the active dashboard</strong> and no longer visible in the list.
+                        </p>
+                      </div>
+                    </div>
+
+                    <FormField label="Cancellation Reason" required className="md:col-span-2">
+                      <textarea
+                        name="remark"
+                        value={actionForm.remark}
+                        onChange={handleFormChange}
+                        rows={3}
+                        placeholder="Please provide a detailed reason for cancellation..."
+                        disabled={isUpdating}
+                        className="w-full px-4 py-2.5 border-2 border-red-200 rounded-lg focus:border-red-400 focus:outline-none text-sm resize-none bg-red-50"
+                      />
+                    </FormField>
+                  </>
+                )}
+
                 {(isCRM || actionForm.status === 'pending') && (
                   <>
                     <FormField label="Next Follow-up Date" required>
@@ -2782,9 +2923,22 @@ const SchedulePayment = () => {
             <div className="px-5 py-4 bg-slate-50 border-t flex gap-3 justify-end rounded-b-2xl">
               <button onClick={closeActionModal} disabled={isUpdating}
                 className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-100 transition text-sm disabled:opacity-60">Cancel</button>
-              <button onClick={handleSubmitAction} disabled={isUpdating || !actionForm.status}
-                className="px-6 py-2.5 text-white font-bold rounded-lg transition text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed bg-green-600 hover:bg-green-700">
-                {isUpdating ? <><Loader2 size={15} className="animate-spin" /> Submitting...</> : 'Submit Action'}
+              <button
+                onClick={handleSubmitAction}
+                disabled={isUpdating || !actionForm.status}
+                className={`px-6 py-2.5 text-white font-bold rounded-lg transition text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isCancelledStatus(actionForm.status)
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {isUpdating ? (
+                  <><Loader2 size={15} className="animate-spin" /> Submitting...</>
+                ) : isCancelledStatus(actionForm.status) ? (
+                  <><XCircle size={15} /> Cancel Payment</>
+                ) : (
+                  'Submit Action'
+                )}
               </button>
             </div>
           </div>

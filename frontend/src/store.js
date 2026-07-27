@@ -34,7 +34,7 @@ import {cpPaymentApi} from './features/UnitPosseion/CPPaymentSlice'
 
 import { mainSummaryApi } from './features/Summary/mainSummarySlice';
 
-
+import { ledgerApi } from './features/SchedulePayment/LedgerSlice';
 
 
 
@@ -70,7 +70,7 @@ export const store = configureStore({
     /////// 
 
     [mainSummaryApi.reducerPath]: mainSummaryApi.reducer,  // ← added mainSummaryApi reducer
-   
+    [ledgerApi.reducerPath]: ledgerApi.reducer,
   },
 
   middleware: (getDefaultMiddleware) =>
@@ -103,7 +103,7 @@ export const store = configureStore({
 
 
       .concat(mainSummaryApi.middleware)  
-      
+      .concat(ledgerApi.middleware)
 });
 
 export default store;

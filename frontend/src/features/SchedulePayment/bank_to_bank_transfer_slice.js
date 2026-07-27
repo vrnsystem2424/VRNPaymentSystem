@@ -1,6 +1,6 @@
+
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
-// VITE project mein .env se base URL (VITE_ prefix compulsory)
 const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 export const bankTransferApiSlice = createApi({
@@ -12,9 +12,10 @@ export const bankTransferApiSlice = createApi({
       return headers;
     },
   }),
-  tagTypes: ['Transfers'], // Ab sirf Transfers tag ki zarurat hai
+  tagTypes: ['Transfers'],
   endpoints: (builder) => ({
-    // 1. Pending Transfers List
+
+    // ── GET: Pending Transfers ──────────────────────────────────────────
     getPendingTransfers: builder.query({
       query: () => '/api/payment/GET-Actual-Transfer-In-Out',
       providesTags: ['Transfers'],
@@ -23,23 +24,27 @@ export const bankTransferApiSlice = createApi({
       },
     }),
 
-    // 2. Update Actual Bank Status & Remark
+    // ── POST: Update with paymentDate ───────────────────────────────────
     updateActualBankTransfer: builder.mutation({
-      query: ({ UID, status, remark }) => ({
-        url: '/api/payment/update-Actual-bank-To-bank',
+      query: ({ UID, status, remark, paymentDate }) => ({
+        url:    '/api/payment/update-Actual-bank-To-bank',
         method: 'POST',
-        body: { UID, status, remark },
+        body: {
+          UID,
+          status,
+          remark,
+          paymentDate,   // ✅ NEW - Q column
+        },
       }),
       invalidatesTags: ['Transfers'],
     }),
+
   }),
 });
 
-// Exported hooks
 export const {
   useGetPendingTransfersQuery,
   useUpdateActualBankTransferMutation,
 } = bankTransferApiSlice;
 
-// Reducer export for store
 export default bankTransferApiSlice;
