@@ -112,7 +112,6 @@
 
 
 
-
 // server.js
 const express = require('express');
 const { google } = require('googleapis');
@@ -149,7 +148,7 @@ const SummaryMain = require('./controllers/Summary/SummaryMain');
 const app = express();
 
 // ============================================
-// 1. DYNAMIC CORS (All Vercel URLs Supported) ✅
+// 1. CORS Configuration (Fixed & Safe) ✅
 // ============================================
 const allowedOrigins = [
   'https://vrn-payment-system-hxrj.vercel.app',
@@ -161,15 +160,10 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Postman ya server-to-server requests (bina origin ke) allow karein
     if (!origin) return callback(null, true);
-    
-    // Allowed list ya koi bhi *.vercel.app URL allow karein
     if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
       return callback(null, true);
     }
-    
-    // Fallback: allow all (safety ke liye)
     return callback(null, true);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -177,11 +171,8 @@ app.use(cors({
   credentials: true
 }));
 
-// Pre-flight OPTIONS requests
-app.options('*', cors());
-
 // ============================================
-// 2. Body Parsing (15MB Limit for Base64 Images)
+// 2. Body Parsing (15MB Limit)
 // ============================================
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
@@ -229,15 +220,10 @@ app.get('/', (req, res) => {
 });
 
 // ============================================
-// 6. Global Error Handler (CORS-safe)
+// 6. Global Error Handler
 // ============================================
 app.use((err, req, res, next) => {
   console.error('❌ Server Error:', err.message);
-  
-  // Ensure CORS headers even in errors
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  
   res.status(err.status || 500).json({
     error: err.message || 'Internal Server Error',
     success: false
