@@ -196,6 +196,392 @@ router.get('/Schedule-Payment', async (req, res) => {
 
 
 
+// router.post('/update-Schedule-payment', async (req, res) => {
+//   try {
+//     const {
+//       paymentId = '',
+//       status = '',
+//       lastDateOfReceiving = '',
+//       amountReceived = '',
+//       nextDate = '',
+//       remark = '',
+//       bankName = '',
+//       paymentMode = '',
+//       paymentDetails = '',
+//       Planned = '',
+//       bookingId = '',
+//       applicantName = '',
+//       contact = '',
+//       email = '',
+//       CurrentAddress = '',
+//       agreementValue = '',
+//       bookingAmount = '',
+//       Project_Name = '',
+//       unitCode = '',
+//       block = '',
+//       unitNo = '',
+//       unitType = '',
+//       size = '',
+//       projectType = '',
+//       Date: submissionDate = '',
+//       gstPercent = '0',
+//       cgst = '0',
+//       sgst = '0',
+//       netAmount = '0',
+//       tdsAmount = '0'
+//     } = req.body;
+
+//     if (!paymentId?.trim() || !bookingId?.trim()) {
+//       return res.status(400).json({ success: false, message: 'paymentId aur bookingId zaroori hain' });
+//     }
+
+//     console.log('Request body:', req.body);
+
+//     const trimmedPaymentId = paymentId.trim();
+//     const targetBookingId = bookingId.trim();
+//     const normalizedStatus = (status || '').trim().toLowerCase();
+
+//     console.log(`Processing: paymentId=${trimmedPaymentId} | bookingId=${targetBookingId} | status=${normalizedStatus}`);
+
+//     let effectiveNextDate = (nextDate || '').trim();
+
+//     const doneStatuses = ['done', 'completed', 'paid', 'complete', 'refund', 'refund payment'];
+//     const isDone = doneStatuses.includes(normalizedStatus);
+//     const isRefund = normalizedStatus === 'refund' || normalizedStatus === 'refund payment';
+//     const isWorkNotDone = normalizedStatus === 'worknotdone' || normalizedStatus === 'work not done';
+//     const isCancelled = normalizedStatus === 'cancelled' || normalizedStatus === 'cancel';
+
+//     if (isWorkNotDone) {
+//       effectiveNextDate = tdsAmount || '0';
+//     } else if (isCancelled) {
+//       effectiveNextDate = '-';
+//     } else if (isDone) {
+//       effectiveNextDate = '-';
+//     } else if ((normalizedStatus === 'partial' || normalizedStatus === 'pending') && !effectiveNextDate.trim()) {
+//       console.warn(`Warning: ${normalizedStatus} status but nextDate is empty`);
+//     }
+
+//     const safeNetAmount = netAmount ? String(netAmount) : '0';
+//     const safeAmountReceived = amountReceived ? String(amountReceived) : '0';
+//     const safeCgst = cgst ? String(cgst) : '0';
+//     const safeSgst = sgst ? String(sgst) : '0';
+//     const safeTdsAmount = tdsAmount ? String(tdsAmount) : '0';
+
+//     // 1. FMS Update
+//     const fmsResponse = await sheets.spreadsheets.values.get({
+//       spreadsheetId,
+//       range: 'Copy of FMS!A8:AB',
+//     });
+
+//     const fmsRows = fmsResponse.data.values || [];
+//     const fmsRowIndex = fmsRows.findIndex(row => (row[1] || '').trim() === trimmedPaymentId);
+
+//     let fmsRowNum = null;
+//     const fmsUpdates = [];
+//     let followupCount = '0';
+
+//     if (fmsRowIndex !== -1) {
+//       fmsRowNum = 8 + fmsRowIndex;
+//       const row = fmsRows[fmsRowIndex];
+
+//       followupCount = (row[25] || '0').trim();
+//       let newFollowup = parseInt(followupCount, 10) || 0;
+//       newFollowup += 1;
+//       followupCount = newFollowup.toString();
+
+//       if (isRefund) {
+//         // ─── REFUND FLOW ───
+//         const prevRefundInAB = parseFloat(row[27] || '0') || 0;
+//         const newRefundAmount = parseFloat(safeAmountReceived) || 0;
+//         const totalRefundAB = prevRefundInAB + newRefundAmount;
+
+//         const fields = [
+//           { col: 'V', val: normalizedStatus },
+//           { col: 'W', val: lastDateOfReceiving.trim() || '' },
+//           { col: 'Y', val: effectiveNextDate },
+//           { col: 'Z', val: remark?.trim() || '' },
+//           { col: 'AA', val: followupCount },
+//           { col: 'AB', val: totalRefundAB.toString() },
+//         ];
+
+//         fields.forEach(({ col, val }) => {
+//           fmsUpdates.push({ range: `Copy of FMS!${col}${fmsRowNum}`, values: [[val]] });
+//         });
+
+//         console.log(`REFUND → AB updated: total=${totalRefundAB}`);
+
+//       } else if (isWorkNotDone) {
+//         // ─── WORK NOT DONE FLOW ───
+//         const prevReceived = parseFloat(row[23] || '0') || 0;
+//         const newNetAmount = parseFloat(safeNetAmount) || 0;
+//         const totalReceived = prevReceived + newNetAmount;
+
+//         const fields = [
+//           { col: 'V', val: 'worknotdone' },
+//           { col: 'W', val: lastDateOfReceiving.trim() || '' },
+//           { col: 'X', val: totalReceived.toString() },
+//           { col: 'Y', val: safeTdsAmount },
+//           { col: 'Z', val: remark?.trim() || '' },
+//           { col: 'AA', val: followupCount },
+//         ];
+
+//         fields.forEach(({ col, val }) => {
+//           fmsUpdates.push({ range: `Copy of FMS!${col}${fmsRowNum}`, values: [[val]] });
+//         });
+
+//         console.log(`WORK NOT DONE → total=${totalReceived}`);
+
+//       } else if (isCancelled) {
+//         // ═══════════════════════════════════════════════════════════════
+//         // ✅ CANCELLED FLOW - Cancel ALL schedules of the same booking
+//         // ═══════════════════════════════════════════════════════════════
+//         console.log(`\n═══════════════════════════════════════`);
+//         console.log(`🚫 CANCELLED → Finding all schedules for booking: ${targetBookingId}`);
+
+//         // Find ALL rows with same booking ID (column A - index 0)
+//         const allBookingRows = [];
+//         fmsRows.forEach((row, idx) => {
+//           const rowBookingId = (row[0] || '').toString().trim().replace(/\s+/g, ' ');
+//           if (rowBookingId === targetBookingId) {
+//             const actualRowNum = 8 + idx;
+//             allBookingRows.push({
+//               rowNum:    actualRowNum,
+//               paymentId: (row[1] || '').toString().trim(),
+//               planned:   (row[19] || '').toString().trim(),
+//             });
+//           }
+//         });
+
+//         console.log(`📋 Found ${allBookingRows.length} schedules for booking ${targetBookingId}:`);
+//         allBookingRows.forEach(r => {
+//           console.log(`  → Row ${r.rowNum}: Payment ${r.paymentId} | Planned: ${r.planned}`);
+//         });
+
+//         // Mark V column = 'cancelled' for ALL these rows
+//         allBookingRows.forEach(({ rowNum }) => {
+//           fmsUpdates.push({
+//             range:  `Copy of FMS!V${rowNum}`,
+//             values: [['cancelled']],
+//           });
+//           fmsUpdates.push({
+//             range:  `Copy of FMS!W${rowNum}`,
+//             values: [[lastDateOfReceiving.trim() || '']],
+//           });
+//           fmsUpdates.push({
+//             range:  `Copy of FMS!Z${rowNum}`,
+//             values: [[remark?.trim() || 'Payment cancelled']],
+//           });
+//           fmsUpdates.push({
+//             range:  `Copy of FMS!AA${rowNum}`,
+//             values: [[followupCount]],
+//           });
+//         });
+
+//         console.log(`✅ ${allBookingRows.length} rows will be marked as 'cancelled'`);
+//         console.log(`═══════════════════════════════════════\n`);
+
+//       } else {
+//         // ─── NORMAL FLOW (Done / Partial / Pending) ───
+//         const prevReceived = parseFloat(row[23] || '0') || 0;
+//         const newNetAmount = parseFloat(safeNetAmount) || 0;
+//         const totalReceived = prevReceived + newNetAmount;
+
+//         const fields = [
+//           { col: 'V', val: normalizedStatus },
+//           { col: 'W', val: lastDateOfReceiving.trim() || '' },
+//           { col: 'X', val: totalReceived.toString() },
+//           { col: 'Y', val: effectiveNextDate },
+//           { col: 'Z', val: remark?.trim() || '' },
+//           { col: 'AA', val: followupCount },
+//         ];
+
+//         fields.forEach(({ col, val }) => {
+//           fmsUpdates.push({ range: `Copy of FMS!${col}${fmsRowNum}`, values: [[val]] });
+//         });
+
+//         console.log(`NORMAL → X: total=${totalReceived}`);
+//       }
+//     } else {
+//       followupCount = '1';
+//       console.log(`Payment ID not found in FMS: ${trimmedPaymentId}`);
+//     }
+
+   
+// const shouldAppendPayment = isDone || normalizedStatus === 'partial' || isWorkNotDone || isRefund;
+
+//     if (shouldAppendPayment) {
+//       let acColumnValue = '';
+//       if (isRefund) acColumnValue = 'refund';
+//       if (isWorkNotDone) acColumnValue = 'worknotdone';
+
+//       const paymentRow = [
+//         targetBookingId,
+//         trimmedPaymentId,
+//         applicantName || '',
+//         contact || '',
+//         email || '',
+//         CurrentAddress || '',
+//         agreementValue || '',
+//         bookingAmount || '',
+//         Project_Name || '',
+//         unitCode || '',
+//         block || '',
+//         unitNo || '',
+//         unitType || '',
+//         size || '',
+//         (projectType || '').trim(),
+//         Planned || '',
+//         normalizedStatus || '',
+//         '',
+//         bankName?.trim() || '',
+//         paymentMode?.trim() || '',
+//         paymentDetails?.trim() || '',
+//         lastDateOfReceiving.trim() || '',
+//         safeNetAmount,
+//         effectiveNextDate,
+//         remark?.trim() || '',
+//         safeCgst,
+//         safeSgst,
+//         safeAmountReceived,
+//         acColumnValue,
+//       ];
+
+//       await sheets.spreadsheets.values.append({
+//         spreadsheetId,
+//         range: 'Payment!A:AC',
+//         valueInputOption: 'USER_ENTERED',
+//         resource: { values: [paymentRow] }
+//       });
+
+//       console.log(`Payment row appended for status: ${normalizedStatus}`);
+//     } else {
+//       console.log(`Skipping Payment append — status is ${normalizedStatus}`);
+//     }
+
+//     // 3. Scoring append — SIRF pending pe
+//     const shouldLogToScoring = normalizedStatus === 'pending';
+
+//     if (shouldLogToScoring) {
+//       const now = new Date();
+//       const timestamp = [
+//         String(now.getDate()).padStart(2, '0'),
+//         String(now.getMonth() + 1).padStart(2, '0'),
+//         now.getFullYear()
+//       ].join('/') + ' ' + [
+//         String(now.getHours()).padStart(2, '0'),
+//         String(now.getMinutes()).padStart(2, '0'),
+//         String(now.getSeconds()).padStart(2, '0')
+//       ].join(':');
+
+//       await sheets.spreadsheets.values.append({
+//         spreadsheetId,
+//         range: 'Scoring!A:I',
+//         valueInputOption: 'USER_ENTERED',
+//         resource: {
+//           values: [[
+//             timestamp,
+//             targetBookingId,
+//             trimmedPaymentId,
+//             projectType || '',
+//             Planned || '',
+//             effectiveNextDate,
+//             followupCount,
+//             remark || '',
+//             normalizedStatus
+//           ]]
+//         }
+//       });
+
+//       console.log(`Scoring row appended for pending status`);
+//     } else {
+//       console.log(`Skipping Scoring append — only pending status logs to Scoring sheet`);
+//     }
+
+//     // 4. FMS batch update
+//     if (fmsUpdates.length > 0) {
+//       await sheets.spreadsheets.values.batchUpdate({
+//         spreadsheetId,
+//         resource: {
+//           valueInputOption: 'USER_ENTERED',
+//           data: fmsUpdates
+//         }
+//       });
+
+//       console.log(`FMS batch update done: ${fmsUpdates.length} cell updates`);
+//     }
+
+//     // ✅ Custom message for cancelled (show count)
+//     let successMessage = 'Payment action recorded successfully';
+//     if (isRefund) successMessage = 'Refund processed successfully';
+//     else if (isWorkNotDone) successMessage = 'Work Not Done recorded successfully';
+//     else if (isCancelled) {
+//       // Count how many rows got cancelled
+//       const cancelCount = fmsUpdates.filter(u => u.range.includes('!V')).length;
+//       successMessage = `Booking cancelled successfully! ${cancelCount} schedule(s) marked as cancelled.`;
+//     }
+
+//     res.json({
+//       success: true,
+//       message: successMessage,
+//       paymentId: trimmedPaymentId,
+//       bookingId: targetBookingId,
+//       fmsRow: fmsRowNum || 'Not found',
+//       followupCount,
+//       status: normalizedStatus,
+//       isRefund,
+//       isWorkNotDone,
+//       isCancelled,
+//       nextDate: effectiveNextDate,
+//       lastDateReceived: lastDateOfReceiving || 'Not provided',
+//       cancelledSchedulesCount: isCancelled
+//         ? fmsUpdates.filter(u => u.range.includes('!V')).length
+//         : 0,
+//       gstDetails: {
+//         gstPercent: gstPercent || '0',
+//         cgst: safeCgst,
+//         sgst: safeSgst,
+//         netAmount: safeNetAmount,
+//         grossAmount: safeAmountReceived,
+//         tdsAmount: isWorkNotDone ? safeTdsAmount : '0'
+//       }
+//     });
+
+//   } catch (error) {
+//     console.error('POST /update-Schedule-payment error:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Server error',
+//       error: error.message
+//     });
+//   }
+// });
+
+
+
+
+// ==========================================
+// ✅ FILTER-PROOF HELPER FUNCTION
+// यह फंक्शन शीट की असली आखिरी खाली रो (Actual Empty Row) ढूँढेगा,
+// चाहे शीट पर कोई भी फ़िल्टर लगा हो या रो छुपी हुई हो।
+// ==========================================
+async function getActualNextEmptyRow(sheets, spreadsheetId, sheetName, checkRange = 'A:AC') {
+  try {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetName}!${checkRange}`,
+    });
+    const rows = response.data.values || [];
+    // rows.length + 1 हमेशा अगली खाली Row का नंबर देगा
+    return rows.length + 1;
+  } catch (error) {
+    console.error(`Error in getActualNextEmptyRow for ${sheetName}:`, error);
+    throw error;
+  }
+}
+
+// ==========================================
+// 🚀 MAIN UPDATE ROUTE
+// ==========================================
 router.post('/update-Schedule-payment', async (req, res) => {
   try {
     const {
@@ -332,13 +718,10 @@ router.post('/update-Schedule-payment', async (req, res) => {
         console.log(`WORK NOT DONE → total=${totalReceived}`);
 
       } else if (isCancelled) {
-        // ═══════════════════════════════════════════════════════════════
-        // ✅ CANCELLED FLOW - Cancel ALL schedules of the same booking
-        // ═══════════════════════════════════════════════════════════════
+        // ─── CANCELLED FLOW ───
         console.log(`\n═══════════════════════════════════════`);
         console.log(`🚫 CANCELLED → Finding all schedules for booking: ${targetBookingId}`);
 
-        // Find ALL rows with same booking ID (column A - index 0)
         const allBookingRows = [];
         fmsRows.forEach((row, idx) => {
           const rowBookingId = (row[0] || '').toString().trim().replace(/\s+/g, ' ');
@@ -357,7 +740,6 @@ router.post('/update-Schedule-payment', async (req, res) => {
           console.log(`  → Row ${r.rowNum}: Payment ${r.paymentId} | Planned: ${r.planned}`);
         });
 
-        // Mark V column = 'cancelled' for ALL these rows
         allBookingRows.forEach(({ rowNum }) => {
           fmsUpdates.push({
             range:  `Copy of FMS!V${rowNum}`,
@@ -406,8 +788,8 @@ router.post('/update-Schedule-payment', async (req, res) => {
       console.log(`Payment ID not found in FMS: ${trimmedPaymentId}`);
     }
 
-   
-const shouldAppendPayment = isDone || normalizedStatus === 'partial' || isWorkNotDone || isRefund;
+    // 2. PAYMENT SHEET LOGIC (Safe & Filter-Proof Append)
+    const shouldAppendPayment = isDone || normalizedStatus === 'partial' || isWorkNotDone || isRefund;
 
     if (shouldAppendPayment) {
       let acColumnValue = '';
@@ -446,19 +828,22 @@ const shouldAppendPayment = isDone || normalizedStatus === 'partial' || isWorkNo
         acColumnValue,
       ];
 
-      await sheets.spreadsheets.values.append({
+      // Dynamic safe row index find करेंगे (A से AC रेंज को स्कैन करके)
+      const nextPaymentRow = await getActualNextEmptyRow(sheets, spreadsheetId, 'Payment', 'A:AC');
+
+      await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: 'Payment!A:AC',
+        range: `Payment!A${nextPaymentRow}:AC${nextPaymentRow}`,
         valueInputOption: 'USER_ENTERED',
         resource: { values: [paymentRow] }
       });
 
-      console.log(`Payment row appended for status: ${normalizedStatus}`);
+      console.log(`✅ Payment row successfully inserted at exact row: ${nextPaymentRow}`);
     } else {
       console.log(`Skipping Payment append — status is ${normalizedStatus}`);
     }
 
-    // 3. Scoring append — SIRF pending pe
+    // 3. SCORING SHEET LOGIC (Safe & Filter-Proof Append)
     const shouldLogToScoring = normalizedStatus === 'pending';
 
     if (shouldLogToScoring) {
@@ -473,26 +858,29 @@ const shouldAppendPayment = isDone || normalizedStatus === 'partial' || isWorkNo
         String(now.getSeconds()).padStart(2, '0')
       ].join(':');
 
-      await sheets.spreadsheets.values.append({
+      const scoringRow = [
+        timestamp,
+        targetBookingId,
+        trimmedPaymentId,
+        projectType || '',
+        Planned || '',
+        effectiveNextDate,
+        followupCount,
+        remark || '',
+        normalizedStatus
+      ];
+
+      // Dynamic safe row index find करेंगे (A से I रेंज को स्कैन करके)
+      const nextScoringRow = await getActualNextEmptyRow(sheets, spreadsheetId, 'Scoring', 'A:I');
+
+      await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: 'Scoring!A:I',
+        range: `Scoring!A${nextScoringRow}:I${nextScoringRow}`,
         valueInputOption: 'USER_ENTERED',
-        resource: {
-          values: [[
-            timestamp,
-            targetBookingId,
-            trimmedPaymentId,
-            projectType || '',
-            Planned || '',
-            effectiveNextDate,
-            followupCount,
-            remark || '',
-            normalizedStatus
-          ]]
-        }
+        resource: { values: [scoringRow] }
       });
 
-      console.log(`Scoring row appended for pending status`);
+      console.log(`✅ Scoring row successfully inserted at exact row: ${nextScoringRow}`);
     } else {
       console.log(`Skipping Scoring append — only pending status logs to Scoring sheet`);
     }
@@ -510,12 +898,11 @@ const shouldAppendPayment = isDone || normalizedStatus === 'partial' || isWorkNo
       console.log(`FMS batch update done: ${fmsUpdates.length} cell updates`);
     }
 
-    // ✅ Custom message for cancelled (show count)
+    // ✅ Custom response message builder
     let successMessage = 'Payment action recorded successfully';
     if (isRefund) successMessage = 'Refund processed successfully';
     else if (isWorkNotDone) successMessage = 'Work Not Done recorded successfully';
     else if (isCancelled) {
-      // Count how many rows got cancelled
       const cancelCount = fmsUpdates.filter(u => u.range.includes('!V')).length;
       successMessage = `Booking cancelled successfully! ${cancelCount} schedule(s) marked as cancelled.`;
     }
@@ -555,6 +942,7 @@ const shouldAppendPayment = isDone || normalizedStatus === 'partial' || isWorkNo
     });
   }
 });
+
 
 router.get('/project-bank-mapping', async (req, res) => {
   try {
