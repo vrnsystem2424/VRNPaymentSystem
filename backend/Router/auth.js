@@ -11,7 +11,8 @@ const ALLOWED_USER_TYPES = [
   'CRM',
   'ACCOUNTS',
   'PAYMENT',
-  'VRN'
+  'VRN',
+  'SUMMARY'
 ];
 
 // Login Route

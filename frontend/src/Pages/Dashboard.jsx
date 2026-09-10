@@ -1,5 +1,4 @@
 
-
 // // Dashboard.jsx
 // import React, { useState, useEffect, useRef } from "react";
 // import { BarChart3, DollarSign, LogOut, Menu, X, ChevronDown, Building2, KeyRound } from "lucide-react";
@@ -49,13 +48,14 @@
 //   const canSeeActualPaymentIn = isAdmin || isFinance || isAccounts;
 //   const canSeeTransferBankToBank = isAdmin || isFinance;
 //   const canSeePaymentForm = isAdmin || isFinance;
-
-//   // ✅ NEW - Bank Charges & Interest Permission
 //   const canSeeBankChargesInterest = isAdmin || isFinance || isAccounts;
 
 //   const canSeeApprovel = isAdmin || isVRN;
 //   const canSeeBillEntry = isAdmin || isAccounts || isFinance;
 //   const canSeeExpensesPayment = isAdmin || isAccounts || isFinance;
+
+//   // ✅ NEW - Advance Form Permission
+//   const canSeeAdvanceForm = isAdmin || isAccounts || isFinance || isVRN;
 
 //   // Possession Permissions
 //   const canSeePossession = isAdmin || isCRM;
@@ -104,13 +104,15 @@
 //       path.startsWith("/dashboard/actual-payment-in") ||
 //       path.startsWith("/dashboard/transfer-bank-to-bank") ||
 //       path.startsWith("/dashboard/form") ||
-//       path.startsWith("/dashboard/bankchargesinterest") // ✅ NEW
+//       path.startsWith("/dashboard/bankchargesinterest")
 //     );
 
+//     // ✅ AdvanceForm bhi office mein add kiya
 //     setIsOfficeSelected(
 //       path.startsWith("/dashboard/Approvel1") ||
 //       path.startsWith("/dashboard/BillEntry") ||
-//       path.startsWith("/dashboard/ExpensesPayment")
+//       path.startsWith("/dashboard/ExpensesPayment") ||
+//       path.startsWith("/dashboard/AdvanceForm")
 //     );
 
 //     setIsPossessionSelected(
@@ -184,7 +186,6 @@
 //     navigate("/dashboard/form");
 //   };
 
-//   // ✅ NEW - Bank Charges & Interest Navigation
 //   const goToBankChargesInterest = () => {
 //     setIsMobileMenuOpen(false);
 //     setIsPaymentDropdownOpen(false);
@@ -211,6 +212,14 @@
 //     setIsOfficeDropdownOpen(false);
 //     setIsMobileOfficeDropdownOpen(false);
 //     navigate("/dashboard/ExpensesPayment");
+//   };
+
+//   // ✅ NEW - Advance Form Navigation
+//   const goToAdvanceForm = () => {
+//     setIsMobileMenuOpen(false);
+//     setIsOfficeDropdownOpen(false);
+//     setIsMobileOfficeDropdownOpen(false);
+//     navigate("/dashboard/AdvanceForm");
 //   };
 
 //   const goToAgreement = () => {
@@ -350,9 +359,19 @@
 //                       {canSeeExpensesPayment && (
 //                         <button
 //                           onClick={goToExpensesPayment}
-//                           className="w-full text-left px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white transition-colors text-sm font-medium"
+//                           className="w-full text-left px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white transition-colors text-sm font-medium border-b border-gray-800"
 //                         >
 //                           Expenses Payment
+//                         </button>
+//                       )}
+
+//                       {/* ✅ NEW - Advance Form - Desktop */}
+//                       {canSeeAdvanceForm && (
+//                         <button
+//                           onClick={goToAdvanceForm}
+//                           className="w-full text-left px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white transition-colors text-sm font-medium"
+//                         >
+//                           Advance Form
 //                         </button>
 //                       )}
 //                     </div>
@@ -479,8 +498,6 @@
 //                           Payment Form
 //                         </button>
 //                       )}
-
-//                       {/* ✅ NEW - Bank Charges & Interest - Desktop */}
 //                       {canSeeBankChargesInterest && (
 //                         <button
 //                           onClick={goToBankChargesInterest}
@@ -596,6 +613,16 @@
 //                             className="w-full text-left px-5 py-3 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all text-sm"
 //                           >
 //                             Expenses Payment
+//                           </button>
+//                         )}
+
+//                         {/* ✅ NEW - Advance Form - Mobile */}
+//                         {canSeeAdvanceForm && (
+//                           <button
+//                             onClick={goToAdvanceForm}
+//                             className="w-full text-left px-5 py-3 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all text-sm"
+//                           >
+//                             Advance Form
 //                           </button>
 //                         )}
 //                       </div>
@@ -726,8 +753,6 @@
 //                             Payment Form
 //                           </button>
 //                         )}
-
-//                         {/* ✅ NEW - Bank Charges & Interest - Mobile */}
 //                         {canSeeBankChargesInterest && (
 //                           <button
 //                             onClick={goToBankChargesInterest}
@@ -772,8 +797,6 @@
 
 
 
-
-
 // Dashboard.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { BarChart3, DollarSign, LogOut, Menu, X, ChevronDown, Building2, KeyRound } from "lucide-react";
@@ -807,14 +830,15 @@ const Dashboard = () => {
   const isAccounts = currentUserType === "ACCOUNTS";
   const isFinance = currentUserType === "PAYMENT";
   const isVRN = currentUserType === "VRN";
+  const isSummaryUser = currentUserType === "SUMMARY"; // ✅ NEW - SUMMARY User Role
 
-  // Summary
-  const canSeeSummary = isAdmin || isVRN;
+  // Summary (Who can see Summary)
+  const canSeeSummary = isAdmin || isVRN || isSummaryUser; // ✅ UPDATED - Added isSummaryUser
 
-  // Payment Dropdown
+  // Payment Dropdown (SUMMARY User cannot see this)
   const canSeePayment = isAdmin || isCRM || isAccounts || isFinance || isVRN;
 
-  // Office Dropdown
+  // Office Dropdown (SUMMARY User cannot see this)
   const canSeeOffice = isAdmin || isAccounts || isFinance || isVRN;
 
   // Individual Menu Items Permissions
@@ -829,7 +853,7 @@ const Dashboard = () => {
   const canSeeBillEntry = isAdmin || isAccounts || isFinance;
   const canSeeExpensesPayment = isAdmin || isAccounts || isFinance;
 
-  // ✅ NEW - Advance Form Permission
+  // Advance Form Permission
   const canSeeAdvanceForm = isAdmin || isAccounts || isFinance || isVRN;
 
   // Possession Permissions
@@ -882,7 +906,6 @@ const Dashboard = () => {
       path.startsWith("/dashboard/bankchargesinterest")
     );
 
-    // ✅ AdvanceForm bhi office mein add kiya
     setIsOfficeSelected(
       path.startsWith("/dashboard/Approvel1") ||
       path.startsWith("/dashboard/BillEntry") ||
@@ -989,7 +1012,6 @@ const Dashboard = () => {
     navigate("/dashboard/ExpensesPayment");
   };
 
-  // ✅ NEW - Advance Form Navigation
   const goToAdvanceForm = () => {
     setIsMobileMenuOpen(false);
     setIsOfficeDropdownOpen(false);
@@ -1079,7 +1101,7 @@ const Dashboard = () => {
             {/* Desktop Menu */}
             <div className="hidden lg:flex items-center gap-6">
 
-              {/* Summary */}
+              {/* Summary Link (Only shown if user has permission) */}
               {canSeeSummary && (
                 <button
                   onClick={goToSummary}
@@ -1139,8 +1161,6 @@ const Dashboard = () => {
                           Expenses Payment
                         </button>
                       )}
-
-                      {/* ✅ NEW - Advance Form - Desktop */}
                       {canSeeAdvanceForm && (
                         <button
                           onClick={goToAdvanceForm}
@@ -1329,6 +1349,7 @@ const Dashboard = () => {
               </div>
 
               <div className="flex-1 p-5 space-y-4 overflow-y-auto">
+                {/* Summary Mobile */}
                 {canSeeSummary && (
                   <button
                     onClick={goToSummary}
@@ -1390,8 +1411,6 @@ const Dashboard = () => {
                             Expenses Payment
                           </button>
                         )}
-
-                        {/* ✅ NEW - Advance Form - Mobile */}
                         {canSeeAdvanceForm && (
                           <button
                             onClick={goToAdvanceForm}
