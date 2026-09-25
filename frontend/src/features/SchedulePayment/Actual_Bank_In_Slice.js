@@ -1,6 +1,57 @@
 
 
 
+// // src/features/Actual_Bank_In_Slice.js
+// import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+
+// const baseUrl = import.meta.env.VITE_BACKEND_URL;
+
+// export const ActualBankInSlice = createApi({
+//   reducerPath: 'actualBankInApi',
+//   baseQuery: fetchBaseQuery({
+//     baseUrl,
+//   }),
+//   tagTypes: ['ActualBankIn'],
+//   endpoints: (builder) => ({
+
+//     // ── GET: Pending Entries ─────────────────────────────────────────────
+//     getPendingActualBankIn: builder.query({
+//       query: () => '/api/payment/GET-Actual-Bank-In',
+//       providesTags: ['ActualBankIn'],
+//       transformResponse: (response) => {
+//         return response.success ? response.data : [];
+//       },
+//     }),
+
+//     // ── POST: Update with paymentDate ────────────────────────────────────
+//     updateActualBankIn: builder.mutation({
+//       query: ({ UID, status, remark, paymentDate }) => ({
+//         url:    '/api/payment/update-Actual-Bank-In',
+//         method: 'POST',
+//         body: {
+//           UID,
+//           status,
+//           remark,
+//           paymentDate,   // ✅ NEW - T column
+//         },
+//       }),
+//       invalidatesTags: ['ActualBankIn'],
+//     }),
+
+//   }),
+// });
+
+// export const {
+//   useGetPendingActualBankInQuery,
+//   useUpdateActualBankInMutation,
+// } = ActualBankInSlice;
+
+// export default ActualBankInSlice;
+
+
+
+
+
 // src/features/Actual_Bank_In_Slice.js
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
@@ -23,17 +74,12 @@ export const ActualBankInSlice = createApi({
       },
     }),
 
-    // ── POST: Update with paymentDate ────────────────────────────────────
+    // ── POST: Insert/Update to "Actual In" Sheet (All Columns A to I) ───
     updateActualBankIn: builder.mutation({
-      query: ({ UID, status, remark, paymentDate }) => ({
+      query: (payload) => ({
         url:    '/api/payment/update-Actual-Bank-In',
         method: 'POST',
-        body: {
-          UID,
-          status,
-          remark,
-          paymentDate,   // ✅ NEW - T column
-        },
+        body:   payload, // Pure payload object ko backend me bhejege
       }),
       invalidatesTags: ['ActualBankIn'],
     }),

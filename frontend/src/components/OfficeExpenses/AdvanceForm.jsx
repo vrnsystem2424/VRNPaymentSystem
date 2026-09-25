@@ -296,13 +296,13 @@ export default function AdvanceForm() {
             <div>
               <label className="flex items-center gap-1 text-sm font-medium mb-1.5 text-gray-700">
                 <FileText size={14} />
-                Payment Details / Remarks
+                Payment Details
               </label>
               <textarea
                 name="PAYMENT_DETAILS"
                 value={formData.PAYMENT_DETAILS}
                 onChange={handleChange}
-                rows={3}
+                rows={2}
                 placeholder="Transaction ID, cheque no., or any other details..."
                 className="w-full p-3 border rounded-lg outline-none resize-none focus:ring-2 focus:ring-indigo-400"
               />
