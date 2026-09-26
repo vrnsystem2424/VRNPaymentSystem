@@ -1,7 +1,8 @@
+
 // import React, { useState, useEffect, useRef } from "react";
 // import { useGetPendingDimPaymentsQuery, useUpdateDimPaymentMutation } from "../../features/OfficeExpense/paymentSlice";
 // import { useGetProjectBankMappingQuery } from "../../features/SchedulePayment/SchedulePaymentSlice";
-// import { FaSearch, FaChevronDown, FaTimes, FaCheckCircle, FaMoneyBillWave, FaArrowDown, FaExclamationTriangle } from "react-icons/fa";
+// import { FaSearch, FaChevronDown, FaTimes, FaCheckCircle, FaMoneyBillWave, FaArrowDown, FaExclamationTriangle, FaLock } from "react-icons/fa";
 
 // const fmt = (n) =>
 //   Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -151,6 +152,19 @@
 //     setShowBills(false); setSelectedVendors([]); setSelectedBillNos([]); setSelectedBills([]); setFilteredBills([]); setPaidAmounts({}); setTdsAmounts({}); setRoundups({}); setRemarks({}); setPartialMode({});
 //   };
 
+//   // ═══════════════════════════════════════════════════════════
+//   // ✅ ADVANCE HELPER (Purchase jaisa)
+//   // ═══════════════════════════════════════════════════════════
+//   const isFullyPaidByAdvance = (bill) => {
+//     const netAmount = Number((bill.NET_AMOUNT_4 || "0").toString().replace(/,/g, "")) || 0;
+//     const advTotal = Number(bill.ADVANCE_TOTAL || 0);
+//     const pstTotal = Number(bill.PAYMENT_SHEET_TOTAL || 0);
+
+//     return advTotal > 0 &&
+//       (pstTotal + advTotal) >= netAmount &&
+//       pstTotal < netAmount;
+//   };
+
 //   const toggleBill = (uid) => {
 //     setSelectedBills((prev) => {
 //       if (prev.includes(uid)) {
@@ -185,35 +199,34 @@
 //     setRoundups((prev) => ({ ...prev, [uid]: v }));
 //   };
 
-//   /*
-//    * ✅ TDS LOGIC:
-//    * Paid Amount = Bill ke against credit (bill balance se minus hoga)
-//    * TDS = Paid amount se cut (bank transfer ke liye)
-//    * Net Payable = Paid - TDS + RoundOff (jo actually bank se jayega)
-//    * 
-//    * Example:
-//    * Bill: ₹10,000 | Already Paid: ₹3,000
-//    * Paid: ₹5,000 → Bill credit = ₹5,000 → New balance = ₹2,000
-//    * TDS: ₹500 → Bank transfer = ₹4,500
-//    */
+//   // ✅ Check all selected are advance
+//   const allSelectedAreAdvance = selectedBills.length > 0 && selectedBills.every((uid) => {
+//     const bill = filteredBills.find(b => b.uid === uid);
+//     return bill && isFullyPaidByAdvance(bill);
+//   });
 
-//   // ✅ Grand Total = sum of bank transfers (Paid - TDS + RoundOff)
+//   // ✅ Grand Total (skip advance bills)
 //   const grandTotal = selectedBills.reduce((sum, uid) => {
-//     const paid  = Number(paidAmounts[uid] || 0);
-//     const tds   = Number(tdsAmounts[uid]  || 0);
-//     const round = Number(roundups[uid]    || 0);
+//     const bill = filteredBills.find(b => b.uid === uid);
+//     if (bill && isFullyPaidByAdvance(bill)) return sum;
+//     const paid = Number(paidAmounts[uid] || 0);
+//     const tds = Number(tdsAmounts[uid] || 0);
+//     const round = Number(roundups[uid] || 0);
 //     return sum + (paid - tds) + round;
 //   }, 0);
 
-//   // ✅ Paid validation: can't exceed bill balance
 //   const handlePaidAmountChange = (uid, value) => {
 //     const bill = filteredBills.find(b => b.uid === uid);
 //     if (!bill) return;
-//     const netAmount   = Number((bill.NET_AMOUNT_4 || "0").toString().replace(/,/g, "")) || 0;
+
+//     // ✅ Skip if fully paid by advance
+//     if (isFullyPaidByAdvance(bill)) return;
+
+//     const netAmount = Number((bill.NET_AMOUNT_4 || "0").toString().replace(/,/g, "")) || 0;
 //     const alreadyPaid = Number(bill.ALREADY_PAID || 0);
-//     const newPaid     = Number(value) || 0;
-//     const maxAllowed  = netAmount - alreadyPaid;
-    
+//     const newPaid = Number(value) || 0;
+//     const maxAllowed = netAmount - alreadyPaid;
+
 //     if (newPaid > maxAllowed && maxAllowed >= 0) {
 //       alert(`⚠️ Max Allowed: ₹${fmt(maxAllowed)}\n\nBill: ₹${fmt(netAmount)}\nAlready Paid: ₹${fmt(alreadyPaid)}`);
 //       setPaidAmounts((p) => ({ ...p, [uid]: maxAllowed }));
@@ -222,77 +235,122 @@
 //     setPaidAmounts((p) => ({ ...p, [uid]: value }));
 //   };
 
-//   // ✅ SUBMIT - Correct payload
+//   // ═══════════════════════════════════════════════════════════
+//   // ✅ SUBMIT (Purchase jaisa — advance + normal handle)
+//   // ═══════════════════════════════════════════════════════════
 //   const handleSubmit = async () => {
-//   if (selectedBills.length === 0) return alert("कम से कम एक bill select करें");
-//   if (!bankDetails || !paymentMode || !paymentDetails.trim() || !paymentDate) return alert("सभी Global Payment Details भरें");
+//     if (selectedBills.length === 0) return alert("कम से कम एक bill select करें");
 
-//   const emptyPaid = selectedBills.filter((uid) => paidAmounts[uid] === "" || paidAmounts[uid] === undefined || isNaN(Number(paidAmounts[uid])));
-//   if (emptyPaid.length > 0) return alert(`${emptyPaid.length} bill(s) में Paid Amount खाली है`);
+//     // ✅ Count bill types
+//     let advanceBillCount = 0;
+//     let normalBillCount = 0;
+//     selectedBills.forEach((uid) => {
+//       const bill = filteredBills.find(b => b.uid === uid);
+//       if (bill && isFullyPaidByAdvance(bill)) advanceBillCount++;
+//       else normalBillCount++;
+//     });
 
-//   const invalidTds = selectedBills.filter((uid) => Number(tdsAmounts[uid] || 0) > Number(paidAmounts[uid] || 0));
-//   if (invalidTds.length > 0) return alert(`${invalidTds.length} bill(s) में TDS > Paid Amount`);
-
-//   const overpaid = selectedBills.filter((uid) => {
-//     const bill = filteredBills.find(b => b.uid === uid);
-//     if (!bill) return false;
-//     const netAmount   = Number((bill.NET_AMOUNT_4 || "0").toString().replace(/,/g, "")) || 0;
-//     const alreadyPaid = Number(bill.ALREADY_PAID || 0);
-//     const currentPaid = Number(paidAmounts[uid] || 0);
-//     return (alreadyPaid + currentPaid) > netAmount + 0.01;
-//   });
-//   if (overpaid.length > 0) return alert(`⚠️ ${overpaid.length} bill(s) mein total Bill Amount se zyada hai!`);
-
-//   try {
-//     for (const uid of selectedBills) {
-//       const bill        = filteredBills.find((b) => b.uid === uid);
-//       const netAmount   = Number((bill?.NET_AMOUNT_4 || "0").toString().replace(/,/g, "")) || 0;
-//       const alreadyPaid = Number(bill?.ALREADY_PAID || 0);
-//       const currentPaid = Number(paidAmounts[uid] || 0);
-//       const tds         = Number(tdsAmounts[uid]  || 0);
-//       const roundup     = Number(roundups[uid]    || 0);
-
-//       const cumulativePaid   = alreadyPaid + currentPaid;
-//       const balanceRemaining = Math.max(0, netAmount - cumulativePaid);
-      
-//       // ✅ Bank transfer / Net Payable
-//       const bankTransfer = (currentPaid - tds) + roundup;
-      
-//       const isPartial = partialMode[uid] || (cumulativePaid < netAmount - 0.01);
-
-//       await updateDimPayment({
-//         uid,
-//         NET_AMOUNT_5:        netAmount,
-//         TDS_5:               tds || "",
-//         PAID_AMOUNT_5:       currentPaid,
-//         CUMULATIVE_PAID_5:   cumulativePaid,
-//         BALANCE_AMOUNT_5:    balanceRemaining,
-//         BANK_DETAILS_5:      bankDetails,
-//         PAYMENT_MODE_5:      paymentMode,
-//         PAYMENT_DETAILS_5:   paymentDetails,
-//         PAYMENT_DATE_5:      paymentDate,
-//         Remark_5:            remarks[uid] || "",
-//         IS_PARTIAL:          isPartial,
-
-//         // Payment_Sheet fields
-//         OFFBILLUID:    bill?.OFFBILLUID || "",
-//         Vendor_Name_4: bill?.Vendor_Name_4 || "",
-//         BILL_NO_4:     bill?.BILL_NO_4 || "",
-//         BILL_DATE_4:   bill?.BILL_DATE_4 || "",
-//         PLANNED_5:     bill?.PLANNED_5 || "",
-//         NET_PAYABLE:   bankTransfer,           // ✅ NEW - H column mein jayega
-//         GRAND_TOTAL:   bankTransfer,           // O column
-//       }).unwrap();
+//     // ✅ Normal bills ke liye sab required
+//     if (normalBillCount > 0) {
+//       if (!bankDetails || !paymentMode || !paymentDetails.trim() || !paymentDate) {
+//         return alert("सभी Global Payment Details भरें");
+//       }
 //     }
+//     // ✅ Sirf advance bills → kuch bhi required nahi
 
-//     alert(`✅ ${selectedBills.length} payment(s) submitted successfully!`);
-//     handleClear();
-//     setBankDetails(""); setPaymentMode(""); setPaymentDetails(""); setPaymentDate("");
-//     refetch();
-//   } catch (err) {
-//     alert("Error: " + (err?.data?.message || err?.message || "Unknown"));
-//   }
-// };
+//     // ✅ Validate non-advance bills
+//     const emptyPaid = selectedBills.filter((uid) => {
+//       const bill = filteredBills.find(b => b.uid === uid);
+//       if (bill && isFullyPaidByAdvance(bill)) return false;
+//       return paidAmounts[uid] === "" || paidAmounts[uid] === undefined || isNaN(Number(paidAmounts[uid]));
+//     });
+//     if (emptyPaid.length > 0) return alert(`${emptyPaid.length} bill(s) में Paid Amount खाली है`);
+
+//     const invalidTds = selectedBills.filter((uid) => {
+//       const bill = filteredBills.find(b => b.uid === uid);
+//       if (bill && isFullyPaidByAdvance(bill)) return false;
+//       return Number(tdsAmounts[uid] || 0) > Number(paidAmounts[uid] || 0);
+//     });
+//     if (invalidTds.length > 0) return alert(`${invalidTds.length} bill(s) में TDS > Paid Amount`);
+
+//     try {
+//       for (const uid of selectedBills) {
+//         const bill = filteredBills.find((b) => b.uid === uid);
+//         const netAmount = Number((bill?.NET_AMOUNT_4 || "0").toString().replace(/,/g, "")) || 0;
+//         const alreadyPaid = Number(bill?.ALREADY_PAID || 0);
+//         const advTotal = Number(bill?.ADVANCE_TOTAL || 0);
+//         const fullyPaid = isFullyPaidByAdvance(bill);
+
+//         if (fullyPaid) {
+//           // ✅ Advance bill — auto pay from advance
+//           const tds = Number(tdsAmounts[uid] || 0);
+//           const effectiveAdvance = Math.min(advTotal, netAmount - alreadyPaid);
+//           const actualPaidAfterTDS = Math.max(effectiveAdvance - tds, 0);
+//           const cumulativePaid = alreadyPaid + effectiveAdvance;
+
+//           await updateDimPayment({
+//             uid,
+//             NET_AMOUNT_5: netAmount,
+//             TDS_5: tds || "",
+//             PAID_AMOUNT_5: actualPaidAfterTDS,
+//             CUMULATIVE_PAID_5: cumulativePaid,
+//             BALANCE_AMOUNT_5: 0,
+//             BANK_DETAILS_5: "",
+//             PAYMENT_MODE_5: "",
+//             PAYMENT_DETAILS_5: "",
+//             PAYMENT_DATE_5: "",
+//             Remark_5: remarks[uid] || "",
+//             IS_PARTIAL: false,
+//             OFFBILLUID: bill?.OFFBILLUID || "",
+//             Vendor_Name_4: bill?.Vendor_Name_4 || "",
+//             BILL_NO_4: bill?.BILL_NO_4 || "",
+//             BILL_DATE_4: bill?.BILL_DATE_4 || "",
+//             PLANNED_5: bill?.PLANNED_5 || "",
+//             NET_PAYABLE: actualPaidAfterTDS,
+//             GRAND_TOTAL: actualPaidAfterTDS,
+//           }).unwrap();
+//         } else {
+//           // ✅ Normal bill
+//           const currentPaid = Number(paidAmounts[uid] || 0);
+//           const tds = Number(tdsAmounts[uid] || 0);
+//           const roundup = Number(roundups[uid] || 0);
+//           const cumulativePaid = alreadyPaid + currentPaid;
+//           const balanceRemaining = Math.max(0, netAmount - cumulativePaid);
+//           const bankTransfer = (currentPaid - tds) + roundup;
+//           const isPartial = partialMode[uid] || (cumulativePaid < netAmount - 0.01);
+
+//           await updateDimPayment({
+//             uid,
+//             NET_AMOUNT_5: netAmount,
+//             TDS_5: tds || "",
+//             PAID_AMOUNT_5: currentPaid,
+//             CUMULATIVE_PAID_5: cumulativePaid,
+//             BALANCE_AMOUNT_5: balanceRemaining,
+//             BANK_DETAILS_5: bankDetails,
+//             PAYMENT_MODE_5: paymentMode,
+//             PAYMENT_DETAILS_5: paymentDetails,
+//             PAYMENT_DATE_5: paymentDate,
+//             Remark_5: remarks[uid] || "",
+//             IS_PARTIAL: isPartial,
+//             OFFBILLUID: bill?.OFFBILLUID || "",
+//             Vendor_Name_4: bill?.Vendor_Name_4 || "",
+//             BILL_NO_4: bill?.BILL_NO_4 || "",
+//             BILL_DATE_4: bill?.BILL_DATE_4 || "",
+//             PLANNED_5: bill?.PLANNED_5 || "",
+//             NET_PAYABLE: bankTransfer,
+//             GRAND_TOTAL: bankTransfer,
+//           }).unwrap();
+//         }
+//       }
+
+//       alert(`✅ ${selectedBills.length} payment(s) submitted successfully!`);
+//       handleClear();
+//       setBankDetails(""); setPaymentMode(""); setPaymentDetails(""); setPaymentDate("");
+//       refetch();
+//     } catch (err) {
+//       alert("Error: " + (err?.data?.message || err?.message || "Unknown"));
+//     }
+//   };
 
 //   if (isLoading) return (
 //     <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "60vh", flexDirection: "column", gap: 14 }}>
@@ -330,6 +388,7 @@
 //         </div>
 //       </div>
 
+//       {/* Filter */}
 //       <div style={{ backgroundColor: "white", borderRadius: 16, padding: "24px 28px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 24, border: "1px solid #f1f5f9" }}>
 //         <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b", marginBottom: 16 }}>🔍 Filter Bills</div>
 //         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
@@ -348,6 +407,7 @@
 //         </div>
 //       </div>
 
+//       {/* Bills */}
 //       {showBills && (
 //         <div>
 //           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -370,32 +430,36 @@
 //           {filteredBills.length === 0 ? (
 //             <div style={{ textAlign: "center", padding: "60px 0", color: "#94a3b8", fontSize: 15, backgroundColor: "white", borderRadius: 14, border: "1px solid #f1f5f9" }}>No bills found</div>
 //           ) : filteredBills.map((bill) => {
-//             const isSelected  = selectedBills.includes(bill.uid);
-//             const parseAmt    = (v) => Number((v || "0").toString().replace(/,/g, "")) || 0;
-//             const netAmount   = parseAmt(bill.NET_AMOUNT_4);
+//             const isSelected = selectedBills.includes(bill.uid);
+//             const parseAmt = (v) => Number((v || "0").toString().replace(/,/g, "")) || 0;
+//             const netAmount = parseAmt(bill.NET_AMOUNT_4);
 //             const alreadyPaid = Number(bill.ALREADY_PAID || 0);
-//             const advTotal    = Number(bill.ADVANCE_TOTAL || 0);
-//             const pstTotal    = Number(bill.PAYMENT_SHEET_TOTAL || 0);
+//             const advTotal = Number(bill.ADVANCE_TOTAL || 0);
+//             const pstTotal = Number(bill.PAYMENT_SHEET_TOTAL || 0);
 //             const currentPaid = Number(paidAmounts[bill.uid] || 0);
-//             const tds         = Number(tdsAmounts[bill.uid]  || 0);
-//             const roundup     = Number(roundups[bill.uid]    || 0);
+//             const tds = Number(tdsAmounts[bill.uid] || 0);
+//             const roundup = Number(roundups[bill.uid] || 0);
 
-//             // ✅ Bank transfer = Paid - TDS + RoundOff
-//             const netPayable   = (currentPaid - tds) + roundup;
-            
-//             // ✅ Bill credit = Paid amount (full, TDS doesn't reduce bill)
-//             const totalBillCredit  = alreadyPaid + currentPaid;
-//             const remainingAfter   = Math.max(0, netAmount - totalBillCredit);
-//             const maxAllowedPaid   = Math.max(0, netAmount - alreadyPaid);
+//             // ✅ Fully paid by advance check
+//             const fullyPaid = isFullyPaidByAdvance(bill);
+
+//             // ✅ Effective advance
+//             const effectiveAdvance = fullyPaid ? Math.min(advTotal, netAmount - pstTotal) : 0;
+//             const excessAdvance = advTotal > (netAmount - pstTotal) ? advTotal - (netAmount - pstTotal) : 0;
+
+//             const netPayable = fullyPaid ? 0 : (currentPaid - tds) + roundup;
+//             const totalBillCredit = alreadyPaid + (fullyPaid ? effectiveAdvance : currentPaid);
+//             const remainingAfter = Math.max(0, netAmount - totalBillCredit);
+//             const maxAllowedPaid = Math.max(0, netAmount - alreadyPaid);
 //             const isFullyPaidAfter = totalBillCredit >= netAmount - 0.01;
-//             const isOverpaid       = totalBillCredit > netAmount + 0.01;
-//             const billBalance      = Number(bill.BALANCE_AMOUNT || netAmount);
+//             const isOverpaid = totalBillCredit > netAmount + 0.01;
+//             const billBalance = Number(bill.BALANCE_AMOUNT || netAmount);
 
 //             return (
 //               <div key={bill.uid} style={{
 //                 backgroundColor: "white", borderRadius: 14, padding: "22px 26px", marginBottom: 16,
-//                 border: isSelected ? "2px solid #6366f1" : bill.IS_PARTIAL ? "2px solid #fbbf24" : "1.5px solid #f1f5f9",
-//                 boxShadow: isSelected ? "0 0 0 3px #6366f115" : "0 1px 4px rgba(0,0,0,0.05)",
+//                 border: fullyPaid ? "2px solid #a78bfa" : isSelected ? "2px solid #6366f1" : bill.IS_PARTIAL ? "2px solid #fbbf24" : "1.5px solid #f1f5f9",
+//                 boxShadow: fullyPaid ? "0 0 0 3px #a78bfa20" : isSelected ? "0 0 0 3px #6366f115" : "0 1px 4px rgba(0,0,0,0.05)",
 //               }}>
 //                 {/* Header */}
 //                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
@@ -407,49 +471,94 @@
 //                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
 //                         <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b" }}>{bill.OFFICE_NAME_1 || bill.Vendor_Name_4}</div>
 //                         {bill.IS_PARTIAL && <span style={{ backgroundColor: "#fef3c7", color: "#d97706", border: "1px solid #fde68a", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>⚡ PARTIAL</span>}
+//                         {fullyPaid && (
+//                           <span style={{ backgroundColor: "#7c3aed", color: "white", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+//                             <FaLock style={{ fontSize: 8 }} /> FULLY PAID BY ADVANCE
+//                           </span>
+//                         )}
 //                       </div>
 //                       <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
 //                         {bill.EXPENSES_HEAD_1}{bill.EXPENSES_SUBHEAD_1 ? ` → ${bill.EXPENSES_SUBHEAD_1}` : ""}
 //                         {bill.OFFBILLUID && <span style={{ marginLeft: 8, color: "#f59e0b", fontWeight: 600, backgroundColor: "#fef3c7", padding: "1px 6px", borderRadius: 4, fontSize: 11 }}>{bill.OFFBILLUID}</span>}
-//                         {bill.uid && <span style={{ marginLeft: 6, color: "#c7d2fe", fontWeight: 600 }}>UID: {bill.uid}</span>}
+//                       </div>
+//                       {/* ✅ Badges */}
+//                       <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+//                         {pstTotal > 0 && (
+//                           <span style={{ fontSize: 10, backgroundColor: "#fef3c7", color: "#92400e", padding: "2px 8px", borderRadius: 4, fontWeight: 700 }}>
+//                             Prev Paid: ₹{fmt(pstTotal)}
+//                           </span>
+//                         )}
+//                         {advTotal > 0 && (
+//                           <span style={{ fontSize: 10, backgroundColor: "#fed7aa", color: "#c2410c", padding: "2px 8px", borderRadius: 4, fontWeight: 700 }}>
+//                             💰 Advance: ₹{fmt(advTotal)}
+//                           </span>
+//                         )}
+//                         {excessAdvance > 0 && (
+//                           <span style={{ fontSize: 10, backgroundColor: "#d1fae5", color: "#065f46", padding: "2px 8px", borderRadius: 4, fontWeight: 700 }}>
+//                             Excess: +₹{fmt(excessAdvance)}
+//                           </span>
+//                         )}
 //                       </div>
 //                     </div>
 //                   </div>
 //                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-//                     <AmountBadge label="Bill Amount" amount={netAmount} color="#6366f1" />
-//                     {alreadyPaid > 0 && (
-//                       <>
-//                         <AmountBadge label="Already Paid" amount={alreadyPaid} color="#10b981" />
-//                         <AmountBadge label="Balance Due" amount={billBalance} color="#ef4444" />
-//                       </>
-//                     )}
-//                   </div>
+//   <AmountBadge label="Bill Amount" amount={netAmount} color="#6366f1" />
+//   {alreadyPaid > 0 && !fullyPaid && (
+//     <>
+//       <AmountBadge label="Already Paid" amount={alreadyPaid} color="#10b981" />
+//       <AmountBadge label="Balance Due" amount={billBalance} color="#ef4444" />
+//     </>
+//   )}
+// </div>
 //                 </div>
 
-//                 {/* Payment History - Simple one line */}
+//                 {/* ✅ Fully Paid by Advance Banner */}
+//                 {fullyPaid && (
+//                   <div style={{ marginBottom: 16, padding: "14px 18px", backgroundColor: "#ede9fe", borderRadius: 10, border: "2px solid #a78bfa", display: "flex", alignItems: "center", gap: 12 }}>
+//                     <span style={{ fontSize: 24 }}>✅</span>
+//                     <div>
+//                       <div style={{ fontSize: 14, fontWeight: 800, color: "#6b21a8" }}>Fully Covered by Advance Payment</div>
+//                       <div style={{ fontSize: 12, color: "#7c3aed", marginTop: 2 }}>
+//                         Advance: ₹{fmt(advTotal)} | No bank details needed
+//                         {excessAdvance > 0 && <span style={{ marginLeft: 8, color: "#059669", fontWeight: 700 }}>| Excess: +₹{fmt(excessAdvance)}</span>}
+//                       </div>
+//                     </div>
+//                   </div>
+//                 )}
+
+//                 {/* ✅ Partial Advance Banner */}
+//                 {advTotal > 0 && !fullyPaid && (
+//                   <div style={{ marginBottom: 16, padding: "10px 14px", backgroundColor: "#fff7ed", borderRadius: 8, borderLeft: "4px solid #f59e0b", display: "flex", alignItems: "center", gap: 8 }}>
+//                     <span style={{ fontSize: 16 }}>⚡</span>
+//                     <span style={{ color: "#92400e", fontWeight: 600, fontSize: 13 }}>
+//                       Advance ₹{fmt(advTotal)} adjusted (Balance: ₹{fmt(billBalance)})
+//                     </span>
+//                   </div>
+//                 )}
+
+//                 {/* Payment History */}
 //                 {(advTotal > 0 || pstTotal > 0) && (
 //                   <div style={{ marginBottom: 16, padding: "10px 14px", backgroundColor: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
 //                     <span style={{ color: "#64748b", fontWeight: 600 }}>📋 History:</span>
-//                     {advTotal > 0 && <span style={{ color: "#1e40af", fontWeight: 600 }}>💰 Advance: <b>₹{fmt(advTotal)}</b> ({bill.ADVANCE_ENTRIES?.length} entries)</span>}
-//                     {pstTotal > 0 && <span style={{ color: "#15803d", fontWeight: 600 }}>🟢 Paid: <b>₹{fmt(pstTotal)}</b> ({bill.PAYMENT_SHEET_ENTRIES?.length} payments)</span>}
+//                     {advTotal > 0 && <span style={{ color: "#c2410c", fontWeight: 600 }}>💰 Advance: <b>₹{fmt(advTotal)}</b></span>}
+//                     {pstTotal > 0 && <span style={{ color: "#15803d", fontWeight: 600 }}>🟢 Paid: <b>₹{fmt(pstTotal)}</b></span>}
 //                     <span style={{ color: "#dc2626", fontWeight: 700, borderLeft: "1px solid #cbd5e1", paddingLeft: 12 }}>
 //                       Total: ₹{fmt(alreadyPaid)} / ₹{fmt(netAmount)}
 //                     </span>
 //                   </div>
 //                 )}
 
-//                 {/* Details Grid */}
+//                 {/* Details */}
 //                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "12px 20px", paddingTop: 14, borderTop: "1px solid #f8fafc" }}>
 //                   <InfoChip label="Office Bill No" value={bill.OFFBILLUID} accent="#f59e0b" />
 //                   <InfoChip label="Item Name" value={bill.ITEM_NAME_1} />
 //                   <InfoChip label="Dept" value={bill.DEPARTMENT_1} />
 //                   <InfoChip label="Raised By" value={bill.RAISED_BY_1} />
 //                   <InfoChip label="Vendor" value={bill.Vendor_Name_4} accent="#6366f1" />
-//                   <InfoChip label="Bill No (Vendor)" value={bill.BILL_NO_4} />
+//                   <InfoChip label="Bill No" value={bill.BILL_NO_4} />
 //                   <InfoChip label="Bill Date" value={bill.BILL_DATE_4} />
-//                   <InfoChip label="GST" value={`C: ${bill.CGST_4 || "—"} | S: ${bill.SGST_4 || "—"}`} />
-//                   <InfoChip label="Planned Date" value={bill.PLANNED_5} accent="#f59e0b" />
-//                   <InfoChip label="Payee" value={bill.PAYEE_NAME_1} />
+//                   <InfoChip label="Planned" value={bill.PLANNED_5} accent="#f59e0b" />
+//                   {advTotal > 0 && <InfoChip label="💰 Advance" value={`₹${fmt(advTotal)}`} accent={fullyPaid ? "#7c3aed" : "#c2410c"} />}
 //                 </div>
 
 //                 {bill.Bill_Photo && (
@@ -458,104 +567,148 @@
 //                   </div>
 //                 )}
 
-//                 {/* Payment Entry */}
+//                 {/* ═══════════════════════════════════════════ */}
+//                 {/* PAYMENT ENTRY */}
+//                 {/* ═══════════════════════════════════════════ */}
 //                 {isSelected && (
-//                   <div style={{ marginTop: 20, padding: "18px 20px", backgroundColor: "#f8f9ff", borderRadius: 12, border: "1px solid #e0e7ff" }}>
-//                     <div style={{ fontSize: 13, fontWeight: 700, color: "#4f46e5", marginBottom: 14 }}>
-//                       Payment Entry — {bill.ITEM_NAME_1 || bill.uid}
+//                   <div style={{ marginTop: 20, padding: "18px 20px", backgroundColor: fullyPaid ? "#faf5ff" : "#f8f9ff", borderRadius: 12, border: `1px solid ${fullyPaid ? "#c084fc" : "#e0e7ff"}` }}>
+//                     <div style={{ fontSize: 13, fontWeight: 700, color: fullyPaid ? "#6b21a8" : "#4f46e5", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+//                       {fullyPaid && <FaLock style={{ fontSize: 11 }} />}
+//                       {fullyPaid ? "Payment Locked (Fully Paid by Advance) — TDS Editable" : `Payment Entry — ${bill.ITEM_NAME_1 || bill.uid}`}
 //                     </div>
 
-//                     {/* Partial Toggle */}
-//                     <div style={{ marginBottom: 14, padding: "10px 14px", backgroundColor: partialMode[bill.uid] ? "#fef3c7" : "#fffbeb", borderRadius: 8, border: `1px solid ${partialMode[bill.uid] ? "#f59e0b" : "#fde68a"}`, display: "flex", alignItems: "center", gap: 10 }}>
-//                       <input type="checkbox" id={`partial-${bill.uid}`} checked={partialMode[bill.uid] || false} onChange={(e) => setPartialMode((p) => ({ ...p, [bill.uid]: e.target.checked }))} style={{ width: 16, height: 16, cursor: "pointer" }} />
-//                       <label htmlFor={`partial-${bill.uid}`} style={{ fontSize: 13, fontWeight: 600, color: "#92400e", cursor: "pointer", flex: 1 }}>
-//                         ⚡ Mark as Partial Payment
-//                       </label>
-//                     </div>
+//                     {/* ✅ FULLY PAID BY ADVANCE - Show locked summary + TDS */}
+//                     {fullyPaid && (
+//                       <>
+//                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16, marginBottom: 14 }}>
+//                           <div>
+//                             <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>BILL AMOUNT</label>
+//                             <input readOnly value={fmt(netAmount)} style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #c084fc", fontSize: 14, backgroundColor: "#faf5ff", color: "#6b21a8", fontWeight: 700, boxSizing: "border-box" }} />
+//                           </div>
+//                           <div>
+//                             <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>ADVANCE USED</label>
+//                             <input readOnly value={fmt(effectiveAdvance)} style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #c084fc", fontSize: 14, backgroundColor: "#faf5ff", color: "#6b21a8", fontWeight: 700, boxSizing: "border-box" }} />
+//                           </div>
+//                           <div>
+//                             <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>
+//                               TDS ₹ <span style={{ fontSize: 9, color: "#94a3b8" }}>OPTIONAL</span>
+//                             </label>
+//                             <input type="number" min="0" placeholder="0" value={tdsAmounts[bill.uid] ?? ""}
+//                               onChange={(e) => {
+//                                 const val = e.target.value;
+//                                 if (val === "") { setTdsAmounts((p) => ({ ...p, [bill.uid]: "" })); return; }
+//                                 let v = Number(val);
+//                                 if (v > effectiveAdvance) { alert(`TDS > Advance Used`); v = effectiveAdvance; }
+//                                 setTdsAmounts((p) => ({ ...p, [bill.uid]: v }));
+//                               }}
+//                               style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #a5b4fc", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
+//                           </div>
+//                           <div>
+//                             <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>NEW BALANCE</label>
+//                             <input readOnly value="0.00" style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #86efac", fontSize: 14, backgroundColor: "#f0fdf4", color: "#16a34a", fontWeight: 700, boxSizing: "border-box" }} />
+//                           </div>
+//                         </div>
 
-//                     {/* Status Banner */}
-//                     {currentPaid > 0 && (
-//                       <div style={{
-//                         marginBottom: 14, padding: "10px 14px",
-//                         backgroundColor: isOverpaid ? "#fee2e2" : isFullyPaidAfter && !partialMode[bill.uid] ? "#dcfce7" : "#fef3c7",
-//                         borderRadius: 8, border: `1.5px solid ${isOverpaid ? "#fca5a5" : isFullyPaidAfter && !partialMode[bill.uid] ? "#86efac" : "#fde68a"}`,
-//                         fontSize: 12, fontWeight: 600,
-//                         color: isOverpaid ? "#dc2626" : isFullyPaidAfter && !partialMode[bill.uid] ? "#15803d" : "#92400e",
-//                       }}>
-//                         {isOverpaid ? (
-//                           <><FaExclamationTriangle style={{ marginRight: 6 }} />OVERPAYMENT! Total ₹{fmt(totalBillCredit)} exceeds Bill ₹{fmt(netAmount)}</>
-//                         ) : isFullyPaidAfter && !partialMode[bill.uid] ? (
-//                           <>✅ Bill <b>FULLY PAID</b> → Status: Done</>
-//                         ) : (
-//                           <>⚡ ₹{fmt(remainingAfter)} remaining → Status: Partial</>
+//                         {tds > 0 && (
+//                           <div style={{ padding: "10px 14px", backgroundColor: "#eff6ff", borderRadius: 8, border: "1px solid #bfdbfe", fontSize: 12, color: "#1e40af", display: "flex", alignItems: "center", gap: 8 }}>
+//                             ℹ️ <strong>TDS ₹{fmt(tds)}</strong> will be deducted. Actual paid from advance: <strong style={{ color: "#16a34a" }}>₹{fmt(effectiveAdvance - tds)}</strong>
+//                           </div>
 //                         )}
-//                       </div>
+//                       </>
 //                     )}
 
-//                     {/* 5 Inputs Only */}
-//                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 16 }}>
-//                       <div>
-//                         <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>
-//                           PAID AMOUNT ₹
-//                           {alreadyPaid > 0 && <span style={{ marginLeft: 4, fontSize: 9, color: "#16a34a", backgroundColor: "#dcfce7", borderRadius: 4, padding: "1px 5px" }}>MAX ₹{fmt(maxAllowedPaid)}</span>}
-//                         </label>
-//                         <input type="number" min="0" placeholder="Enter amount" value={paidAmounts[bill.uid] ?? ""}
-//                           onChange={(e) => handlePaidAmountChange(bill.uid, e.target.value)}
-//                           style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: `1.5px solid ${isOverpaid ? "#ef4444" : "#a5b4fc"}`, fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
-//                       </div>
+//                     {/* ✅ NORMAL BILLS - Regular inputs */}
+//                     {!fullyPaid && (
+//                       <>
+//                         {/* Partial Toggle */}
+//                         <div style={{ marginBottom: 14, padding: "10px 14px", backgroundColor: partialMode[bill.uid] ? "#fef3c7" : "#fffbeb", borderRadius: 8, border: `1px solid ${partialMode[bill.uid] ? "#f59e0b" : "#fde68a"}`, display: "flex", alignItems: "center", gap: 10 }}>
+//                           <input type="checkbox" id={`partial-${bill.uid}`} checked={partialMode[bill.uid] || false} onChange={(e) => setPartialMode((p) => ({ ...p, [bill.uid]: e.target.checked }))} style={{ width: 16, height: 16, cursor: "pointer" }} />
+//                           <label htmlFor={`partial-${bill.uid}`} style={{ fontSize: 13, fontWeight: 600, color: "#92400e", cursor: "pointer", flex: 1 }}>
+//                             ⚡ Mark as Partial Payment
+//                           </label>
+//                         </div>
 
-//                       <div>
-//                         <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>
-//                           TDS ₹ <span style={{ fontSize: 9, color: "#94a3b8", backgroundColor: "#f1f5f9", borderRadius: 4, padding: "1px 5px" }}>OPTIONAL</span>
-//                         </label>
-//                         <input type="number" min="0" placeholder="0" value={tdsAmounts[bill.uid] ?? ""}
-//                           onChange={(e) => {
-//                             const val = e.target.value;
-//                             if (val === "") { setTdsAmounts((p) => ({ ...p, [bill.uid]: "" })); return; }
-//                             let v = Number(val);
-//                             const paid = Number(paidAmounts[bill.uid] || 0);
-//                             if (v > paid) { alert(`TDS ₹${v} > Paid ₹${fmt(paid)}`); v = paid; }
-//                             setTdsAmounts((p) => ({ ...p, [bill.uid]: v }));
-//                           }}
-//                           style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #86efac", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit", backgroundColor: "#f0fdf4" }} />
-//                       </div>
+//                         {/* Status Banner */}
+//                         {currentPaid > 0 && (
+//                           <div style={{
+//                             marginBottom: 14, padding: "10px 14px",
+//                             backgroundColor: isOverpaid ? "#fee2e2" : isFullyPaidAfter && !partialMode[bill.uid] ? "#dcfce7" : "#fef3c7",
+//                             borderRadius: 8, border: `1.5px solid ${isOverpaid ? "#fca5a5" : isFullyPaidAfter && !partialMode[bill.uid] ? "#86efac" : "#fde68a"}`,
+//                             fontSize: 12, fontWeight: 600,
+//                             color: isOverpaid ? "#dc2626" : isFullyPaidAfter && !partialMode[bill.uid] ? "#15803d" : "#92400e",
+//                           }}>
+//                             {isOverpaid ? (
+//                               <><FaExclamationTriangle style={{ marginRight: 6 }} />OVERPAYMENT!</>
+//                             ) : isFullyPaidAfter && !partialMode[bill.uid] ? (
+//                               <>✅ Bill FULLY PAID → Status: Done</>
+//                             ) : (
+//                               <>⚡ ₹{fmt(remainingAfter)} remaining → Status: Partial</>
+//                             )}
+//                           </div>
+//                         )}
 
-//                       <div>
-//                         <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>ROUND OFF (+/-)</label>
-//                         <input type="number" step="0.01" min="-9" max="9" placeholder="0" value={roundups[bill.uid] ?? ""}
-//                           onChange={(e) => handleRoundupChange(bill.uid, e.target.value)}
-//                           style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #fcd34d", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit", backgroundColor: "#fffdf0" }} />
-//                       </div>
+//                         {/* 5 Inputs */}
+//                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 16 }}>
+//                           <div>
+//                             <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>
+//                               PAID AMOUNT ₹
+//                               {alreadyPaid > 0 && <span style={{ marginLeft: 4, fontSize: 9, color: "#16a34a", backgroundColor: "#dcfce7", borderRadius: 4, padding: "1px 5px" }}>MAX ₹{fmt(maxAllowedPaid)}</span>}
+//                             </label>
+//                             <input type="number" min="0" placeholder="Enter amount" value={paidAmounts[bill.uid] ?? ""}
+//                               onChange={(e) => handlePaidAmountChange(bill.uid, e.target.value)}
+//                               style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: `1.5px solid ${isOverpaid ? "#ef4444" : "#a5b4fc"}`, fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
+//                           </div>
+//                           <div>
+//                             <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>
+//                               TDS ₹ <span style={{ fontSize: 9, color: "#94a3b8", backgroundColor: "#f1f5f9", borderRadius: 4, padding: "1px 5px" }}>OPTIONAL</span>
+//                             </label>
+//                             <input type="number" min="0" placeholder="0" value={tdsAmounts[bill.uid] ?? ""}
+//                               onChange={(e) => {
+//                                 const val = e.target.value;
+//                                 if (val === "") { setTdsAmounts((p) => ({ ...p, [bill.uid]: "" })); return; }
+//                                 let v = Number(val);
+//                                 const paid = Number(paidAmounts[bill.uid] || 0);
+//                                 if (v > paid) { alert(`TDS > Paid Amount`); v = paid; }
+//                                 setTdsAmounts((p) => ({ ...p, [bill.uid]: v }));
+//                               }}
+//                               style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #86efac", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit", backgroundColor: "#f0fdf4" }} />
+//                           </div>
+//                           <div>
+//                             <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>ROUND OFF (+/-)</label>
+//                             <input type="number" step="0.01" min="-9" max="9" placeholder="0" value={roundups[bill.uid] ?? ""}
+//                               onChange={(e) => handleRoundupChange(bill.uid, e.target.value)}
+//                               style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #fcd34d", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit", backgroundColor: "#fffdf0" }} />
+//                           </div>
+//                           <div>
+//                             <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>NET PAYABLE ₹</label>
+//                             <input readOnly value={fmt(netPayable)}
+//                               style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: `1.5px solid ${netPayable > 0 ? "#86efac" : "#fca5a5"}`, fontSize: 14, backgroundColor: netPayable > 0 ? "#f0fdf4" : "#fff5f5", color: netPayable > 0 ? "#16a34a" : "#dc2626", fontWeight: 700, boxSizing: "border-box", fontFamily: "inherit" }} />
+//                           </div>
+//                           <div>
+//                             <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>REMARK</label>
+//                             <input type="text" placeholder="Optional" value={remarks[bill.uid] || ""}
+//                               onChange={(e) => setRemarks((p) => ({ ...p, [bill.uid]: e.target.value }))}
+//                               style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #e2e8f0", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
+//                           </div>
+//                         </div>
 
-//                       <div>
-//                         <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>NET PAYABLE ₹</label>
-//                         <input readOnly value={fmt(netPayable)}
-//                           style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: `1.5px solid ${netPayable > 0 ? "#86efac" : "#fca5a5"}`, fontSize: 14, backgroundColor: netPayable > 0 ? "#f0fdf4" : "#fff5f5", color: netPayable > 0 ? "#16a34a" : "#dc2626", fontWeight: 700, boxSizing: "border-box", fontFamily: "inherit" }} />
-//                         {tds > 0 && <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>₹{fmt(currentPaid)} − ₹{fmt(tds)} TDS {roundup !== 0 && `${roundup > 0 ? "+" : ""}${fmt(roundup)}`}</div>}
-//                       </div>
-
-//                       <div>
-//                         <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>REMARK</label>
-//                         <input type="text" placeholder="Optional" value={remarks[bill.uid] || ""}
-//                           onChange={(e) => setRemarks((p) => ({ ...p, [bill.uid]: e.target.value }))}
-//                           style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #e2e8f0", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
-//                       </div>
-//                     </div>
-
-//                     {/* Summary */}
-//                     {(currentPaid > 0 || tds > 0) && (
-//                       <div style={{ marginTop: 14, padding: "10px 16px", backgroundColor: "#eef2ff", borderRadius: 8, border: "1px solid #c7d2fe", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12, fontSize: 12 }}>
-//                         <span style={{ color: "#4f46e5", fontWeight: 600 }}>Bill Credit: ₹{fmt(currentPaid)}</span>
-//                         {tds > 0 && <span style={{ color: "#dc2626", fontWeight: 600 }}>TDS: ₹{fmt(tds)}</span>}
-//                         {roundup !== 0 && <span style={{ color: "#f59e0b", fontWeight: 600 }}>Round: {roundup > 0 ? "+" : ""}{fmt(roundup)}</span>}
-//                         <span style={{ color: "#16a34a", fontWeight: 800 }}>Bank Transfer: ₹{fmt(netPayable)}</span>
-//                         {alreadyPaid > 0 && <span style={{ color: "#7c3aed", fontWeight: 700, borderLeft: "1px solid #c7d2fe", paddingLeft: 12 }}>Bill: ₹{fmt(totalBillCredit)} / ₹{fmt(netAmount)}</span>}
-//                       </div>
+//                         {/* Summary */}
+//                         {(currentPaid > 0 || tds > 0) && (
+//                           <div style={{ marginTop: 14, padding: "10px 16px", backgroundColor: "#eef2ff", borderRadius: 8, border: "1px solid #c7d2fe", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12, fontSize: 12 }}>
+//                             <span style={{ color: "#4f46e5", fontWeight: 600 }}>Bill Credit: ₹{fmt(currentPaid)}</span>
+//                             {tds > 0 && <span style={{ color: "#dc2626", fontWeight: 600 }}>TDS: ₹{fmt(tds)}</span>}
+//                             {roundup !== 0 && <span style={{ color: "#f59e0b", fontWeight: 600 }}>Round: {roundup > 0 ? "+" : ""}{fmt(roundup)}</span>}
+//                             <span style={{ color: "#16a34a", fontWeight: 800 }}>Bank Transfer: ₹{fmt(netPayable)}</span>
+//                           </div>
+//                         )}
+//                       </>
 //                     )}
 
-//                     <button onClick={() => paymentSectionRef.current?.scrollIntoView({ behavior: "smooth" })} style={{ marginTop: 14, padding: "8px 18px", backgroundColor: "#f0f4ff", border: "1.5px solid #c7d2fe", borderRadius: 8, cursor: "pointer", color: "#4f46e5", fontWeight: 600, fontSize: 12, fontFamily: "inherit" }}>
-//                       <FaArrowDown style={{ fontSize: 10, marginRight: 6 }} />Go to Payment Details
-//                     </button>
+//                     {!fullyPaid && (
+//                       <button onClick={() => paymentSectionRef.current?.scrollIntoView({ behavior: "smooth" })} style={{ marginTop: 14, padding: "8px 18px", backgroundColor: "#f0f4ff", border: "1.5px solid #c7d2fe", borderRadius: 8, cursor: "pointer", color: "#4f46e5", fontWeight: 600, fontSize: 12, fontFamily: "inherit" }}>
+//                         <FaArrowDown style={{ fontSize: 10, marginRight: 6 }} />Go to Payment Details
+//                       </button>
+//                     )}
 //                   </div>
 //                 )}
 //               </div>
@@ -563,66 +716,80 @@
 //           })}
 
 //           {/* Grand Total */}
-//           {selectedBills.length > 0 && (
+//           {selectedBills.length > 0 && !allSelectedAreAdvance && grandTotal > 0 && (
 //             <div style={{ backgroundColor: "#f0f4ff", border: "1.5px solid #c7d2fe", borderRadius: 14, padding: "16px 24px", marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
 //               <div style={{ fontSize: 14, fontWeight: 700, color: "#4f46e5" }}>
 //                 Grand Total — {selectedBills.length} bill{selectedBills.length > 1 ? "s" : ""}
-//                 {selectedBills.some((uid) => Number(tdsAmounts[uid] || 0) > 0) && (
-//                   <span style={{ marginLeft: 12, fontSize: 12, color: "#dc2626" }}>(TDS: ₹{fmt(selectedBills.reduce((s, uid) => s + Number(tdsAmounts[uid] || 0), 0))})</span>
-//                 )}
-//                 {selectedBills.some((uid) => partialMode[uid]) && (
-//                   <span style={{ marginLeft: 12, fontSize: 12, color: "#d97706" }}>⚡ {selectedBills.filter((uid) => partialMode[uid]).length} Partial</span>
-//                 )}
 //               </div>
 //               <div style={{ fontSize: 24, fontWeight: 800, color: "#4f46e5" }}>₹{fmt(grandTotal)}</div>
 //             </div>
 //           )}
 
-//           {/* Global Payment Details */}
+//           {/* ═══════════════════════════════════════════════ */}
+//           {/* GLOBAL PAYMENT DETAILS */}
+//           {/* ═══════════════════════════════════════════════ */}
 //           {selectedBills.length > 0 && (
-//             <div ref={paymentSectionRef} style={{ backgroundColor: "white", borderRadius: 16, padding: "26px 28px", marginTop: 24, border: "1.5px solid #e0e7ff", boxShadow: "0 4px 16px rgba(99,102,241,0.08)" }}>
+//             <div ref={paymentSectionRef} style={{ backgroundColor: "white", borderRadius: 16, padding: "26px 28px", marginTop: 24, border: `1.5px solid ${allSelectedAreAdvance ? "#c084fc" : "#e0e7ff"}`, boxShadow: "0 4px 16px rgba(99,102,241,0.08)" }}>
 //               <div style={{ fontSize: 16, fontWeight: 800, color: "#1e293b", marginBottom: 20 }}>
 //                 Global Payment Details
 //                 <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 500, color: "#94a3b8" }}>For {selectedBills.length} bills</span>
 //               </div>
 
-//               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}>
-//                 <div>
-//                   <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>BANK DETAILS</label>
-//                   <select value={bankDetails} onChange={(e) => setBankDetails(e.target.value)} disabled={isBankLoading}
-//                     style={{ width: "100%", padding: "11px 12px", borderRadius: 9, border: `1.5px solid ${isBankError ? "#fca5a5" : "#e2e8f0"}`, fontSize: 13, outline: "none", fontFamily: "inherit" }}>
-//                     <option value="">{isBankLoading ? "⏳ Loading…" : isBankError ? "⚠️ Error" : "— Select Bank —"}</option>
-//                     {!isBankLoading && !isBankError && bankOptions.map((bank, idx) => <option key={idx} value={bank}>{bank}</option>)}
-//                     {isBankError && (<><option>HDFC A/c(0431)</option><option>My City A/c</option></>)}
-//                   </select>
-//                 </div>
-//                 <div>
-//                   <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>PAYMENT MODE</label>
-//                   <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}
-//                     style={{ width: "100%", padding: "11px 12px", borderRadius: 9, border: "1.5px solid #e2e8f0", fontSize: 13, outline: "none", fontFamily: "inherit" }}>
-//                     <option value="">— Select —</option>
-//                     <option>Cheque</option><option>NEFT</option><option>RTGS</option><option>Cash</option>
-//                   </select>
-//                 </div>
-//                 <div>
-//                   <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>{paymentMode === "Cheque" ? "CHEQUE NUMBER" : "PAYMENT DETAILS"}</label>
-//                   <input type="text" placeholder={paymentMode === "Cheque" ? "Cheque no." : "Ref / UTR"} value={paymentDetails} onChange={(e) => setPaymentDetails(e.target.value)}
-//                     style={{ width: "100%", padding: "11px 12px", borderRadius: 9, border: "1.5px solid #e2e8f0", fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
-//                 </div>
-//                 <div>
-//                   <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>PAYMENT DATE</label>
-//                   <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)}
-//                     style={{ width: "100%", padding: "11px 12px", borderRadius: 9, border: "1.5px solid #e2e8f0", fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
-//                 </div>
-//               </div>
+//               {/* ✅ ALL ADVANCE - Direct submit */}
+//               {allSelectedAreAdvance ? (
+//                 <>
+//                   <div style={{ padding: "24px", backgroundColor: "#ede9fe", borderRadius: 12, border: "2px solid #a78bfa", marginBottom: 20, textAlign: "center" }}>
+//                     <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
+//                     <div style={{ fontSize: 18, fontWeight: 800, color: "#6b21a8", marginBottom: 6 }}>All Bills Fully Covered by Advance</div>
+//                     <div style={{ fontSize: 13, color: "#7c3aed" }}>No payment details needed. TDS applied where entered.</div>
+//                     <div style={{ fontSize: 12, color: "#9333ea", marginTop: 8 }}>{selectedBills.length} bill{selectedBills.length > 1 ? "s" : ""} selected</div>
+//                   </div>
+//                   <button onClick={handleSubmit} disabled={isSubmitting} style={{ padding: "14px 40px", backgroundColor: isSubmitting ? "#c084fc" : "#7c3aed", color: "white", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: isSubmitting ? "not-allowed" : "pointer", fontFamily: "inherit", width: "100%" }}>
+//                     {isSubmitting ? "Submitting…" : "✅ SUBMIT ADVANCE PAYMENT"}
+//                   </button>
+//                 </>
+//               ) : (
+//                 /* ✅ NORMAL / MIXED BILLS */
+//                 <>
+//                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}>
+//                     <div>
+//                       <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>BANK DETAILS</label>
+//                       <select value={bankDetails} onChange={(e) => setBankDetails(e.target.value)} disabled={isBankLoading}
+//                         style={{ width: "100%", padding: "11px 12px", borderRadius: 9, border: `1.5px solid ${isBankError ? "#fca5a5" : "#e2e8f0"}`, fontSize: 13, outline: "none", fontFamily: "inherit" }}>
+//                         <option value="">{isBankLoading ? "⏳ Loading…" : isBankError ? "⚠️ Error" : "— Select Bank —"}</option>
+//                         {!isBankLoading && !isBankError && bankOptions.map((bank, idx) => <option key={idx} value={bank}>{bank}</option>)}
+//                         {isBankError && (<><option>HDFC A/c(0431)</option><option>My City A/c</option></>)}
+//                       </select>
+//                     </div>
+//                     <div>
+//                       <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>PAYMENT MODE</label>
+//                       <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}
+//                         style={{ width: "100%", padding: "11px 12px", borderRadius: 9, border: "1.5px solid #e2e8f0", fontSize: 13, outline: "none", fontFamily: "inherit" }}>
+//                         <option value="">— Select —</option>
+//                         <option>Cheque</option><option>NEFT</option><option>RTGS</option><option>Cash</option>
+//                       </select>
+//                     </div>
+//                     <div>
+//                       <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>{paymentMode === "Cheque" ? "CHEQUE NUMBER" : "PAYMENT DETAILS"}</label>
+//                       <input type="text" placeholder={paymentMode === "Cheque" ? "Cheque no." : "Ref / UTR"} value={paymentDetails} onChange={(e) => setPaymentDetails(e.target.value)}
+//                         style={{ width: "100%", padding: "11px 12px", borderRadius: 9, border: "1.5px solid #e2e8f0", fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
+//                     </div>
+//                     <div>
+//                       <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>PAYMENT DATE</label>
+//                       <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)}
+//                         style={{ width: "100%", padding: "11px 12px", borderRadius: 9, border: "1.5px solid #e2e8f0", fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
+//                     </div>
+//                   </div>
 
-//               <div style={{ marginTop: 18, padding: "12px 16px", backgroundColor: "#fffbeb", borderRadius: 9, border: "1px solid #fde68a", fontSize: 12, color: "#92400e" }}>
-//                 💡 <b>Paid Amount</b> = Bill se minus hoga | <b>TDS</b> = Paid se cut (bank transfer ke liye) | <b>Net Payable</b> = Paid − TDS + RoundOff
-//               </div>
+//                   <div style={{ marginTop: 18, padding: "12px 16px", backgroundColor: "#fffbeb", borderRadius: 9, border: "1px solid #fde68a", fontSize: 12, color: "#92400e" }}>
+//                     💡 <b>Paid Amount</b> = Bill se minus | <b>TDS</b> = Paid se cut | <b>Net Payable</b> = Paid − TDS + RoundOff
+//                   </div>
 
-//               <button onClick={handleSubmit} disabled={isSubmitting} style={{ marginTop: 24, padding: "14px 40px", backgroundColor: isSubmitting ? "#a5b4fc" : "#6366f1", color: "white", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: isSubmitting ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
-//                 {isSubmitting ? "Submitting…" : `✓ Submit ${selectedBills.length} Payment${selectedBills.length > 1 ? "s" : ""} — ₹${fmt(grandTotal)}`}
-//               </button>
+//                   <button onClick={handleSubmit} disabled={isSubmitting} style={{ marginTop: 24, padding: "14px 40px", backgroundColor: isSubmitting ? "#a5b4fc" : "#6366f1", color: "white", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: isSubmitting ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+//                     {isSubmitting ? "Submitting…" : `✓ Submit ${selectedBills.length} Payment${selectedBills.length > 1 ? "s" : ""} — ₹${fmt(grandTotal)}`}
+//                   </button>
+//                 </>
+//               )}
 //             </div>
 //           )}
 //         </div>
@@ -632,6 +799,8 @@
 // };
 
 // export default ExpensesPayemnt;
+
+
 
 
 
@@ -790,9 +959,6 @@ const ExpensesPayemnt = () => {
     setShowBills(false); setSelectedVendors([]); setSelectedBillNos([]); setSelectedBills([]); setFilteredBills([]); setPaidAmounts({}); setTdsAmounts({}); setRoundups({}); setRemarks({}); setPartialMode({});
   };
 
-  // ═══════════════════════════════════════════════════════════
-  // ✅ ADVANCE HELPER (Purchase jaisa)
-  // ═══════════════════════════════════════════════════════════
   const isFullyPaidByAdvance = (bill) => {
     const netAmount = Number((bill.NET_AMOUNT_4 || "0").toString().replace(/,/g, "")) || 0;
     const advTotal = Number(bill.ADVANCE_TOTAL || 0);
@@ -837,13 +1003,11 @@ const ExpensesPayemnt = () => {
     setRoundups((prev) => ({ ...prev, [uid]: v }));
   };
 
-  // ✅ Check all selected are advance
   const allSelectedAreAdvance = selectedBills.length > 0 && selectedBills.every((uid) => {
     const bill = filteredBills.find(b => b.uid === uid);
     return bill && isFullyPaidByAdvance(bill);
   });
 
-  // ✅ Grand Total (skip advance bills)
   const grandTotal = selectedBills.reduce((sum, uid) => {
     const bill = filteredBills.find(b => b.uid === uid);
     if (bill && isFullyPaidByAdvance(bill)) return sum;
@@ -857,7 +1021,6 @@ const ExpensesPayemnt = () => {
     const bill = filteredBills.find(b => b.uid === uid);
     if (!bill) return;
 
-    // ✅ Skip if fully paid by advance
     if (isFullyPaidByAdvance(bill)) return;
 
     const netAmount = Number((bill.NET_AMOUNT_4 || "0").toString().replace(/,/g, "")) || 0;
@@ -873,123 +1036,158 @@ const ExpensesPayemnt = () => {
     setPaidAmounts((p) => ({ ...p, [uid]: value }));
   };
 
-  // ═══════════════════════════════════════════════════════════
-  // ✅ SUBMIT (Purchase jaisa — advance + normal handle)
-  // ═══════════════════════════════════════════════════════════
-  const handleSubmit = async () => {
-    if (selectedBills.length === 0) return alert("कम से कम एक bill select करें");
+ const handleSubmit = async () => {
+  if (selectedBills.length === 0) return alert("कम से कम एक bill select करें");
 
-    // ✅ Count bill types
-    let advanceBillCount = 0;
-    let normalBillCount = 0;
-    selectedBills.forEach((uid) => {
-      const bill = filteredBills.find(b => b.uid === uid);
-      if (bill && isFullyPaidByAdvance(bill)) advanceBillCount++;
-      else normalBillCount++;
-    });
+  let advanceBillCount = 0;
+  let normalBillCount = 0;
+  selectedBills.forEach((uid) => {
+    const bill = filteredBills.find((b) => b.uid === uid);
+    if (bill && isFullyPaidByAdvance(bill)) advanceBillCount++;
+    else normalBillCount++;
+  });
 
-    // ✅ Normal bills ke liye sab required
-    if (normalBillCount > 0) {
-      if (!bankDetails || !paymentMode || !paymentDetails.trim() || !paymentDate) {
-        return alert("सभी Global Payment Details भरें");
-      }
+  if (normalBillCount > 0) {
+    if (!bankDetails || !paymentMode || !paymentDetails.trim() || !paymentDate) {
+      return alert("सभी Global Payment Details भरें");
     }
-    // ✅ Sirf advance bills → kuch bhi required nahi
+  }
 
-    // ✅ Validate non-advance bills
-    const emptyPaid = selectedBills.filter((uid) => {
-      const bill = filteredBills.find(b => b.uid === uid);
-      if (bill && isFullyPaidByAdvance(bill)) return false;
-      return paidAmounts[uid] === "" || paidAmounts[uid] === undefined || isNaN(Number(paidAmounts[uid]));
-    });
-    if (emptyPaid.length > 0) return alert(`${emptyPaid.length} bill(s) में Paid Amount खाली है`);
+  const emptyPaid = selectedBills.filter((uid) => {
+    const bill = filteredBills.find((b) => b.uid === uid);
+    if (bill && isFullyPaidByAdvance(bill)) return false;
+    return (
+      paidAmounts[uid] === "" ||
+      paidAmounts[uid] === undefined ||
+      isNaN(Number(paidAmounts[uid]))
+    );
+  });
+  if (emptyPaid.length > 0)
+    return alert(`${emptyPaid.length} bill(s) में Paid Amount खाली है`);
 
-    const invalidTds = selectedBills.filter((uid) => {
-      const bill = filteredBills.find(b => b.uid === uid);
-      if (bill && isFullyPaidByAdvance(bill)) return false;
-      return Number(tdsAmounts[uid] || 0) > Number(paidAmounts[uid] || 0);
-    });
-    if (invalidTds.length > 0) return alert(`${invalidTds.length} bill(s) में TDS > Paid Amount`);
+  const invalidTds = selectedBills.filter((uid) => {
+    const bill = filteredBills.find((b) => b.uid === uid);
+    if (bill && isFullyPaidByAdvance(bill)) return false;
+    return Number(tdsAmounts[uid] || 0) > Number(paidAmounts[uid] || 0);
+  });
+  if (invalidTds.length > 0)
+    return alert(`${invalidTds.length} bill(s) में TDS > Paid Amount`);
 
-    try {
-      for (const uid of selectedBills) {
-        const bill = filteredBills.find((b) => b.uid === uid);
-        const netAmount = Number((bill?.NET_AMOUNT_4 || "0").toString().replace(/,/g, "")) || 0;
+  try {
+    for (const uid of selectedBills) {
+      const bill = filteredBills.find((b) => b.uid === uid);
+      const netAmount =
+        Number((bill?.NET_AMOUNT_4 || "0").toString().replace(/,/g, "")) || 0;
+      const pstTotal = Number(bill?.PAYMENT_SHEET_TOTAL || 0); // ✅ previous paid ONLY
+      const advTotal = Number(bill?.ADVANCE_TOTAL || 0);
+      const fullyPaid = isFullyPaidByAdvance(bill);
+
+      if (fullyPaid) {
+        // ═══════════════════════════════════════════
+        // ✅ ADVANCE FULL PAY — pstTotal use करो, alreadyPaid नहीं
+        // ═══════════════════════════════════════════
+        const tds = Number(tdsAmounts[uid] || 0);
+
+        // Bill पर लगने वाला advance (H में यही जाना चाहिए)
+        const effectiveAdvance = Math.min(
+          advTotal,
+          Math.max(0, netAmount - pstTotal)
+        ); // e.g. min(100000, 73000) = 73000
+
+        const actualPaidAfterTDS = Math.max(effectiveAdvance - tds, 0); // H / NET_PAYABLE
+        const cumulativePaid = pstTotal + effectiveAdvance; // total credit on bill
+
+        console.log("ADVANCE SUBMIT →", {
+          uid,
+          netAmount,
+          pstTotal,
+          advTotal,
+          effectiveAdvance,
+          actualPaidAfterTDS,
+          tds,
+          project: bill?.OFFICE_NAME_1,
+        });
+
+        await updateDimPayment({
+          uid,
+          NET_AMOUNT_5: netAmount,
+          TDS_5: tds || "",
+          PAID_AMOUNT_5: actualPaidAfterTDS, // ✅ 73000 (not 0)
+          CUMULATIVE_PAID_5: cumulativePaid,
+          BALANCE_AMOUNT_5: 0,
+          BANK_DETAILS_5: "",
+          PAYMENT_MODE_5: "",
+          PAYMENT_DETAILS_5: "",
+          PAYMENT_DATE_5: "",
+          Remark_5: remarks[uid] || "",
+          IS_PARTIAL: false,
+          OFFBILLUID: bill?.OFFBILLUID || "",
+          Vendor_Name_4: bill?.Vendor_Name_4 || "",
+          BILL_NO_4: bill?.BILL_NO_4 || "",
+          BILL_DATE_4: bill?.BILL_DATE_4 || "",
+          PLANNED_5: bill?.PLANNED_5 || "",
+          NET_PAYABLE: actualPaidAfterTDS, // ✅ backend H + J deduct
+          GRAND_TOTAL: actualPaidAfterTDS,
+          OFFICE_NAME_1: bill?.OFFICE_NAME_1 || "", // ✅ Column T
+        }).unwrap();
+      } else {
+        // ═══════════════════════════════════════════
+        // ✅ NORMAL / PARTIAL — pehle jaisa
+        // ═══════════════════════════════════════════
         const alreadyPaid = Number(bill?.ALREADY_PAID || 0);
-        const advTotal = Number(bill?.ADVANCE_TOTAL || 0);
-        const fullyPaid = isFullyPaidByAdvance(bill);
+        const currentPaid = Number(paidAmounts[uid] || 0);
+        const tds = Number(tdsAmounts[uid] || 0);
+        const roundup = Number(roundups[uid] || 0);
+        const cumulativePaid = alreadyPaid + currentPaid;
+        const balanceRemaining = Math.max(0, netAmount - cumulativePaid);
+        const bankTransfer = currentPaid - tds + roundup;
+        const isPartial =
+          partialMode[uid] || cumulativePaid < netAmount - 0.01;
 
-        if (fullyPaid) {
-          // ✅ Advance bill — auto pay from advance
-          const tds = Number(tdsAmounts[uid] || 0);
-          const effectiveAdvance = Math.min(advTotal, netAmount - alreadyPaid);
-          const actualPaidAfterTDS = Math.max(effectiveAdvance - tds, 0);
-          const cumulativePaid = alreadyPaid + effectiveAdvance;
+        console.log("NORMAL SUBMIT →", {
+          uid,
+          currentPaid,
+          tds,
+          bankTransfer,
+          project: bill?.OFFICE_NAME_1,
+        });
 
-          await updateDimPayment({
-            uid,
-            NET_AMOUNT_5: netAmount,
-            TDS_5: tds || "",
-            PAID_AMOUNT_5: actualPaidAfterTDS,
-            CUMULATIVE_PAID_5: cumulativePaid,
-            BALANCE_AMOUNT_5: 0,
-            BANK_DETAILS_5: "",
-            PAYMENT_MODE_5: "",
-            PAYMENT_DETAILS_5: "",
-            PAYMENT_DATE_5: "",
-            Remark_5: remarks[uid] || "",
-            IS_PARTIAL: false,
-            OFFBILLUID: bill?.OFFBILLUID || "",
-            Vendor_Name_4: bill?.Vendor_Name_4 || "",
-            BILL_NO_4: bill?.BILL_NO_4 || "",
-            BILL_DATE_4: bill?.BILL_DATE_4 || "",
-            PLANNED_5: bill?.PLANNED_5 || "",
-            NET_PAYABLE: actualPaidAfterTDS,
-            GRAND_TOTAL: actualPaidAfterTDS,
-          }).unwrap();
-        } else {
-          // ✅ Normal bill
-          const currentPaid = Number(paidAmounts[uid] || 0);
-          const tds = Number(tdsAmounts[uid] || 0);
-          const roundup = Number(roundups[uid] || 0);
-          const cumulativePaid = alreadyPaid + currentPaid;
-          const balanceRemaining = Math.max(0, netAmount - cumulativePaid);
-          const bankTransfer = (currentPaid - tds) + roundup;
-          const isPartial = partialMode[uid] || (cumulativePaid < netAmount - 0.01);
-
-          await updateDimPayment({
-            uid,
-            NET_AMOUNT_5: netAmount,
-            TDS_5: tds || "",
-            PAID_AMOUNT_5: currentPaid,
-            CUMULATIVE_PAID_5: cumulativePaid,
-            BALANCE_AMOUNT_5: balanceRemaining,
-            BANK_DETAILS_5: bankDetails,
-            PAYMENT_MODE_5: paymentMode,
-            PAYMENT_DETAILS_5: paymentDetails,
-            PAYMENT_DATE_5: paymentDate,
-            Remark_5: remarks[uid] || "",
-            IS_PARTIAL: isPartial,
-            OFFBILLUID: bill?.OFFBILLUID || "",
-            Vendor_Name_4: bill?.Vendor_Name_4 || "",
-            BILL_NO_4: bill?.BILL_NO_4 || "",
-            BILL_DATE_4: bill?.BILL_DATE_4 || "",
-            PLANNED_5: bill?.PLANNED_5 || "",
-            NET_PAYABLE: bankTransfer,
-            GRAND_TOTAL: bankTransfer,
-          }).unwrap();
-        }
+        await updateDimPayment({
+          uid,
+          NET_AMOUNT_5: netAmount,
+          TDS_5: tds || "",
+          PAID_AMOUNT_5: currentPaid,
+          CUMULATIVE_PAID_5: cumulativePaid,
+          BALANCE_AMOUNT_5: balanceRemaining,
+          BANK_DETAILS_5: bankDetails,
+          PAYMENT_MODE_5: paymentMode,
+          PAYMENT_DETAILS_5: paymentDetails,
+          PAYMENT_DATE_5: paymentDate,
+          Remark_5: remarks[uid] || "",
+          IS_PARTIAL: isPartial,
+          OFFBILLUID: bill?.OFFBILLUID || "",
+          Vendor_Name_4: bill?.Vendor_Name_4 || "",
+          BILL_NO_4: bill?.BILL_NO_4 || "",
+          BILL_DATE_4: bill?.BILL_DATE_4 || "",
+          PLANNED_5: bill?.PLANNED_5 || "",
+          NET_PAYABLE: bankTransfer,
+          GRAND_TOTAL: bankTransfer,
+          OFFICE_NAME_1: bill?.OFFICE_NAME_1 || "", // ✅ Column T
+        }).unwrap();
       }
-
-      alert(`✅ ${selectedBills.length} payment(s) submitted successfully!`);
-      handleClear();
-      setBankDetails(""); setPaymentMode(""); setPaymentDetails(""); setPaymentDate("");
-      refetch();
-    } catch (err) {
-      alert("Error: " + (err?.data?.message || err?.message || "Unknown"));
     }
-  };
 
+    alert(`✅ ${selectedBills.length} payment(s) submitted successfully!`);
+    handleClear();
+    setBankDetails("");
+    setPaymentMode("");
+    setPaymentDetails("");
+    setPaymentDate("");
+    refetch();
+  } catch (err) {
+    alert("Error: " + (err?.data?.message || err?.message || "Unknown"));
+  }
+};
   if (isLoading) return (
     <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "60vh", flexDirection: "column", gap: 14 }}>
       <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #e2e8f0", borderTopColor: "#6366f1", animation: "spin 0.8s linear infinite" }} />
@@ -1078,10 +1276,8 @@ const ExpensesPayemnt = () => {
             const tds = Number(tdsAmounts[bill.uid] || 0);
             const roundup = Number(roundups[bill.uid] || 0);
 
-            // ✅ Fully paid by advance check
             const fullyPaid = isFullyPaidByAdvance(bill);
 
-            // ✅ Effective advance
             const effectiveAdvance = fullyPaid ? Math.min(advTotal, netAmount - pstTotal) : 0;
             const excessAdvance = advTotal > (netAmount - pstTotal) ? advTotal - (netAmount - pstTotal) : 0;
 
@@ -1119,7 +1315,6 @@ const ExpensesPayemnt = () => {
                         {bill.EXPENSES_HEAD_1}{bill.EXPENSES_SUBHEAD_1 ? ` → ${bill.EXPENSES_SUBHEAD_1}` : ""}
                         {bill.OFFBILLUID && <span style={{ marginLeft: 8, color: "#f59e0b", fontWeight: 600, backgroundColor: "#fef3c7", padding: "1px 6px", borderRadius: 4, fontSize: 11 }}>{bill.OFFBILLUID}</span>}
                       </div>
-                      {/* ✅ Badges */}
                       <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                         {pstTotal > 0 && (
                           <span style={{ fontSize: 10, backgroundColor: "#fef3c7", color: "#92400e", padding: "2px 8px", borderRadius: 4, fontWeight: 700 }}>
@@ -1140,17 +1335,16 @@ const ExpensesPayemnt = () => {
                     </div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-  <AmountBadge label="Bill Amount" amount={netAmount} color="#6366f1" />
-  {alreadyPaid > 0 && !fullyPaid && (
-    <>
-      <AmountBadge label="Already Paid" amount={alreadyPaid} color="#10b981" />
-      <AmountBadge label="Balance Due" amount={billBalance} color="#ef4444" />
-    </>
-  )}
-</div>
+                    <AmountBadge label="Bill Amount" amount={netAmount} color="#6366f1" />
+                    {alreadyPaid > 0 && !fullyPaid && (
+                      <>
+                        <AmountBadge label="Already Paid" amount={alreadyPaid} color="#10b981" />
+                        <AmountBadge label="Balance Due" amount={billBalance} color="#ef4444" />
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                {/* ✅ Fully Paid by Advance Banner */}
                 {fullyPaid && (
                   <div style={{ marginBottom: 16, padding: "14px 18px", backgroundColor: "#ede9fe", borderRadius: 10, border: "2px solid #a78bfa", display: "flex", alignItems: "center", gap: 12 }}>
                     <span style={{ fontSize: 24 }}>✅</span>
@@ -1164,7 +1358,6 @@ const ExpensesPayemnt = () => {
                   </div>
                 )}
 
-                {/* ✅ Partial Advance Banner */}
                 {advTotal > 0 && !fullyPaid && (
                   <div style={{ marginBottom: 16, padding: "10px 14px", backgroundColor: "#fff7ed", borderRadius: 8, borderLeft: "4px solid #f59e0b", display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 16 }}>⚡</span>
@@ -1205,9 +1398,7 @@ const ExpensesPayemnt = () => {
                   </div>
                 )}
 
-                {/* ═══════════════════════════════════════════ */}
                 {/* PAYMENT ENTRY */}
-                {/* ═══════════════════════════════════════════ */}
                 {isSelected && (
                   <div style={{ marginTop: 20, padding: "18px 20px", backgroundColor: fullyPaid ? "#faf5ff" : "#f8f9ff", borderRadius: 12, border: `1px solid ${fullyPaid ? "#c084fc" : "#e0e7ff"}` }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: fullyPaid ? "#6b21a8" : "#4f46e5", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
@@ -1215,7 +1406,6 @@ const ExpensesPayemnt = () => {
                       {fullyPaid ? "Payment Locked (Fully Paid by Advance) — TDS Editable" : `Payment Entry — ${bill.ITEM_NAME_1 || bill.uid}`}
                     </div>
 
-                    {/* ✅ FULLY PAID BY ADVANCE - Show locked summary + TDS */}
                     {fullyPaid && (
                       <>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16, marginBottom: 14 }}>
@@ -1255,10 +1445,8 @@ const ExpensesPayemnt = () => {
                       </>
                     )}
 
-                    {/* ✅ NORMAL BILLS - Regular inputs */}
                     {!fullyPaid && (
                       <>
-                        {/* Partial Toggle */}
                         <div style={{ marginBottom: 14, padding: "10px 14px", backgroundColor: partialMode[bill.uid] ? "#fef3c7" : "#fffbeb", borderRadius: 8, border: `1px solid ${partialMode[bill.uid] ? "#f59e0b" : "#fde68a"}`, display: "flex", alignItems: "center", gap: 10 }}>
                           <input type="checkbox" id={`partial-${bill.uid}`} checked={partialMode[bill.uid] || false} onChange={(e) => setPartialMode((p) => ({ ...p, [bill.uid]: e.target.checked }))} style={{ width: 16, height: 16, cursor: "pointer" }} />
                           <label htmlFor={`partial-${bill.uid}`} style={{ fontSize: 13, fontWeight: 600, color: "#92400e", cursor: "pointer", flex: 1 }}>
@@ -1266,7 +1454,6 @@ const ExpensesPayemnt = () => {
                           </label>
                         </div>
 
-                        {/* Status Banner */}
                         {currentPaid > 0 && (
                           <div style={{
                             marginBottom: 14, padding: "10px 14px",
@@ -1285,7 +1472,6 @@ const ExpensesPayemnt = () => {
                           </div>
                         )}
 
-                        {/* 5 Inputs */}
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 16 }}>
                           <div>
                             <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>
@@ -1330,7 +1516,6 @@ const ExpensesPayemnt = () => {
                           </div>
                         </div>
 
-                        {/* Summary */}
                         {(currentPaid > 0 || tds > 0) && (
                           <div style={{ marginTop: 14, padding: "10px 16px", backgroundColor: "#eef2ff", borderRadius: 8, border: "1px solid #c7d2fe", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12, fontSize: 12 }}>
                             <span style={{ color: "#4f46e5", fontWeight: 600 }}>Bill Credit: ₹{fmt(currentPaid)}</span>
@@ -1353,7 +1538,6 @@ const ExpensesPayemnt = () => {
             );
           })}
 
-          {/* Grand Total */}
           {selectedBills.length > 0 && !allSelectedAreAdvance && grandTotal > 0 && (
             <div style={{ backgroundColor: "#f0f4ff", border: "1.5px solid #c7d2fe", borderRadius: 14, padding: "16px 24px", marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#4f46e5" }}>
@@ -1363,9 +1547,6 @@ const ExpensesPayemnt = () => {
             </div>
           )}
 
-          {/* ═══════════════════════════════════════════════ */}
-          {/* GLOBAL PAYMENT DETAILS */}
-          {/* ═══════════════════════════════════════════════ */}
           {selectedBills.length > 0 && (
             <div ref={paymentSectionRef} style={{ backgroundColor: "white", borderRadius: 16, padding: "26px 28px", marginTop: 24, border: `1.5px solid ${allSelectedAreAdvance ? "#c084fc" : "#e0e7ff"}`, boxShadow: "0 4px 16px rgba(99,102,241,0.08)" }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: "#1e293b", marginBottom: 20 }}>
@@ -1373,7 +1554,6 @@ const ExpensesPayemnt = () => {
                 <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 500, color: "#94a3b8" }}>For {selectedBills.length} bills</span>
               </div>
 
-              {/* ✅ ALL ADVANCE - Direct submit */}
               {allSelectedAreAdvance ? (
                 <>
                   <div style={{ padding: "24px", backgroundColor: "#ede9fe", borderRadius: 12, border: "2px solid #a78bfa", marginBottom: 20, textAlign: "center" }}>
@@ -1387,7 +1567,6 @@ const ExpensesPayemnt = () => {
                   </button>
                 </>
               ) : (
-                /* ✅ NORMAL / MIXED BILLS */
                 <>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}>
                     <div>
@@ -1437,3 +1616,4 @@ const ExpensesPayemnt = () => {
 };
 
 export default ExpensesPayemnt;
+
