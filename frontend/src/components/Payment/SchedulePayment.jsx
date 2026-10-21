@@ -1333,6 +1333,7 @@ const SchedulePayment = () => {
                     {!isCRM && <option value="partial">◑ Partial Payment</option>}
                     {!isCRM && <option value="refund">↩ Refund Payment</option>}
                     {!isCRM && <option value="worknotdone">📝 Work Not Done</option>}
+                    {!isCRM && <option value="partial">◑ Loan Payment</option>}
                     {!isCRM && <option value="cancelled">✕ Cancel Payment</option>}
                     <option value="pending">⏳ Pending</option>
                   </select>
